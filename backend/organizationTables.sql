@@ -26,14 +26,14 @@ CREATE TABLE organization_members (
     id BIGSERIAL PRIMARY KEY,
     organization_id BIGINT NOT NULL,
     user_id BIGINT NOT NULL,
-    role VARCHAR(30) NOT NULL,
+    role VARCHAR(30) NOT NULL CHECK (role IN ('owner', 'manager', 'staff')),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 
     FOREIGN KEY (organization_id)
-        REFERENCES organizations(id),
+        REFERENCES organizations(id) ON DELETE CASCADE,
 
     FOREIGN KEY (user_id)
-        REFERENCES users(id),
+        REFERENCES users(id) ON DELETE CASCADE,
 
     UNIQUE (organization_id, user_id)
 );
@@ -47,7 +47,7 @@ CREATE TABLE properties (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 
     FOREIGN KEY (organization_id)
-        REFERENCES organizations(id)
+        REFERENCES organizations(id) ON DELETE CASCADE
 );
 
 
@@ -59,7 +59,7 @@ CREATE TABLE floors (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 
     FOREIGN KEY (property_id)
-        REFERENCES properties(id)
+        REFERENCES properties(id) ON DELETE CASCADE
 );
 
 
@@ -72,7 +72,7 @@ CREATE TABLE rooms (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 
     FOREIGN KEY (floor_id)
-        REFERENCES floors(id),
+        REFERENCES floors(id) ON DELETE CASCADE,
 
     UNIQUE (floor_id, room_number)
 );
@@ -83,11 +83,11 @@ CREATE TABLE beds (
     id BIGSERIAL PRIMARY KEY,
     room_id BIGINT NOT NULL,
     bed_number VARCHAR(20) NOT NULL,
-    status VARCHAR(20) NOT NULL DEFAULT 'VACANT',
+    status VARCHAR(20) NOT NULL DEFAULT 'VACANT' CHECK (status IN ('VACANT', 'OCCUPIED', 'MAINTENANCE')),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 
     FOREIGN KEY (room_id)
-        REFERENCES rooms(id),
+        REFERENCES rooms(id) ON DELETE CASCADE,
 
     UNIQUE (room_id, bed_number)
 );
@@ -96,26 +96,35 @@ CREATE TABLE beds (
 -- 8. Tenants
 CREATE TABLE tenants (
     id BIGSERIAL PRIMARY KEY,
+    organization_id BIGINT NOT NULL,
     name VARCHAR(100) NOT NULL,
     phone VARCHAR(20) NOT NULL,
     email VARCHAR(150),
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+
+    FOREIGN KEY (organization_id)
+        REFERENCES organizations(id) ON DELETE CASCADE
 );
 
 
 -- 9. Stays
 CREATE TABLE stays (
     id BIGSERIAL PRIMARY KEY,
+    organization_id BIGINT NOT NULL,
     tenant_id BIGINT NOT NULL,
     bed_id BIGINT NOT NULL,
     move_in_date DATE NOT NULL,
     move_out_date DATE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+
+    FOREIGN KEY (organization_id)
+        REFERENCES organizations(id) ON DELETE CASCADE,
 
     FOREIGN KEY (tenant_id)
-        REFERENCES tenants(id),
+        REFERENCES tenants(id) ON DELETE CASCADE,
 
     FOREIGN KEY (bed_id)
-        REFERENCES beds(id)
+        REFERENCES beds(id) ON DELETE CASCADE
 );
 
 
@@ -126,11 +135,11 @@ CREATE TABLE rent_dues (
     due_month DATE NOT NULL,
     amount_paise BIGINT NOT NULL,
     due_date DATE NOT NULL,
-    status VARCHAR(20) NOT NULL DEFAULT 'DUE',
+    status VARCHAR(20) NOT NULL DEFAULT 'DUE' CHECK (status IN ('DUE', 'PARTIALLY_PAID', 'PAID', 'OVERDUE')),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 
     FOREIGN KEY (stay_id)
-        REFERENCES stays(id),
+        REFERENCES stays(id) ON DELETE CASCADE,
 
     CHECK (amount_paise > 0),
 
@@ -149,7 +158,7 @@ CREATE TABLE payments (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 
     FOREIGN KEY (rent_due_id)
-        REFERENCES rent_dues(id),
+        REFERENCES rent_dues(id) ON DELETE CASCADE,
 
     CHECK (amount_paise > 0)
 );
@@ -159,14 +168,14 @@ CREATE TABLE payments (
 CREATE TABLE deposit_transactions (
     id BIGSERIAL PRIMARY KEY,
     stay_id BIGINT NOT NULL,
-    transaction_type VARCHAR(20) NOT NULL,
+    transaction_type VARCHAR(20) NOT NULL CHECK (transaction_type IN ('COLLECT', 'REFUND')),
     amount_paise BIGINT NOT NULL,
     transaction_date DATE NOT NULL,
     note VARCHAR(255),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 
     FOREIGN KEY (stay_id)
-        REFERENCES stays(id),
+        REFERENCES stays(id) ON DELETE CASCADE,
 
     CHECK (amount_paise > 0)
 );
@@ -180,3 +189,16 @@ CREATE TABLE deposit_transactions (
 CREATE UNIQUE INDEX stays_one_active_bed
 ON stays (bed_id)
 WHERE move_out_date IS NULL;
+
+-- ============================================
+-- 13. Performance Indexes
+-- ============================================
+
+CREATE INDEX idx_properties_organization_id ON properties(organization_id);
+CREATE INDEX idx_floors_property_id ON floors(property_id);
+CREATE INDEX idx_tenants_organization_id ON tenants(organization_id);
+CREATE INDEX idx_stays_organization_id ON stays(organization_id);
+CREATE INDEX idx_stays_tenant_id ON stays(tenant_id);
+CREATE INDEX idx_stays_bed_id ON stays(bed_id);
+CREATE INDEX idx_rent_dues_stay_id ON rent_dues(stay_id);
+CREATE INDEX idx_payments_rent_due_id ON payments(rent_due_id);

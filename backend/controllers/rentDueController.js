@@ -1,9 +1,12 @@
 const RentDueModel = require("../models/rentDueModel");
+const { validateIdParam } = require("../utils/validators");
 
 const RentDueController = {
     async getByStay(req, res) {
         try {
             const { stayId } = req.params;
+
+            if (!validateIdParam(stayId, res, "stayId")) return;
 
             const rentDues = await RentDueModel.getByStay(stayId);
 
@@ -20,6 +23,8 @@ const RentDueController = {
     async getSummary(req, res) {
         try {
             const { rentDueId } = req.params;
+
+            if (!validateIdParam(rentDueId, res, "rentDueId")) return;
 
             const summary = await RentDueModel.getSummary(rentDueId);
 

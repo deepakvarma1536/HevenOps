@@ -1,11 +1,13 @@
 const pool = require("../config/db");
 
 const TenantModel = {
-    async getAll() {
+    async getAll(organizationId) {
         const result = await pool.query(
             `SELECT *
              FROM tenants
-             ORDER BY id`
+             WHERE organization_id = $1
+             ORDER BY id`,
+            [organizationId]
         );
         return result.rows;
     }

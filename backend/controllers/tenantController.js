@@ -1,9 +1,20 @@
 const TenantModel = require("../models/tenantModel");
+const { validateIdParam } = require("../utils/validators");
 
 const TenantController = {
     async getAll(req, res) {
         try {
-            const tenants = await TenantModel.getAll();
+            const { organizationId } = req.query;
+
+            if (!organizationId) {
+                return res.status(400).json({
+                    error: "organizationId query parameter is required"
+                });
+            }
+
+            if (!validateIdParam(organizationId, res, "organizationId")) return;
+
+            const tenants = await TenantModel.getAll(organizationId);
             res.json(tenants);
         } catch (error) {
             console.error("Database query failed:", error);

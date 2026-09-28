@@ -32,6 +32,18 @@ app.use("/api/tenants", tenantRoutes);
 app.use("/api/stays", stayRoutes);
 app.use("/api/rent-dues", rentDueRoutes);
 app.use("/api/rent-dues", paymentRoutes);
+
+// 404 Handler (Catch-all for undefined routes)
+app.use((req, res) => {
+    res.status(404).json({ error: "Route not found" });
+});
+
+// Global Error Handler
+app.use((err, req, res, next) => {
+    console.error("Unhandled Server Error:", err);
+    res.status(500).json({ error: "Internal Server Error" });
+});
+
 // Start server
 app.listen(PORT, () => {
     console.log(`HevenOps backend running on http://localhost:${PORT}`);

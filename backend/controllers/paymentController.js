@@ -1,10 +1,13 @@
 const PaymentModel = require("../models/paymentModel");
+const { validateIdParam } = require("../utils/validators");
 
 const PaymentController = {
 
     async getByRentDue(req, res) {
         try {
             const { rentDueId } = req.params;
+
+            if (!validateIdParam(rentDueId, res, "rentDueId")) return;
 
             const payments = await PaymentModel.getByRentDue(rentDueId);
 
@@ -24,6 +27,8 @@ const PaymentController = {
         try {
             const { rentDueId } = req.params;
 
+            if (!validateIdParam(rentDueId, res, "rentDueId")) return;
+
             const {
                 amount_paise,
                 payment_method,
@@ -32,47 +37,39 @@ const PaymentController = {
 
 
             // 1. Validate amount
-            if (!amount_paise || amount_paise <= 0) {
+            if (!amount_paise || !Number.isInteger(amount_paise) || amount_paise <= 0) {
                 return res.status(400).json({
-                    error: "Amount must be greater than 0"
+                    error: "Amount must be a positive integer"
                 });
             }
 
 
-            // 2. Get remaining rent
-            const rentDue = await PaymentModel.getRemainingAmount(rentDueId);
-
-            if (!rentDue) {
-                return res.status(404).json({
-                    error: "Rent due not found"
-                });
+            // 2. Process payment transaction safely
+            try {
+                const payment = await PaymentModel.processPayment(
+                    rentDueId,
+                    amount_paise,
+                    payment_method,
+                    reference
+                );
+                
+                res.status(201).json(payment);
+                
+            } catch (error) {
+                if (error.message === "NOT_FOUND") {
+                    return res.status(404).json({ error: "Rent due not found" });
+                }
+                
+                if (error.message.startsWith("OVERPAYMENT:")) {
+                    const remaining = parseInt(error.message.split(":")[1], 10);
+                    return res.status(400).json({
+                        error: "Payment amount exceeds remaining rent",
+                        remaining_paise: remaining
+                    });
+                }
+                
+                throw error; // Route to the outer 500 handler
             }
-
-
-            // 3. Convert PostgreSQL value to JavaScript number
-            const remainingPaise = Number(rentDue.remaining_paise);
-
-
-            // 4. Prevent overpayment
-            if (amount_paise > remainingPaise) {
-                return res.status(400).json({
-                    error: "Payment amount exceeds remaining rent",
-                    remaining_paise: remainingPaise
-                });
-            }
-
-
-            // 5. Create payment
-            const payment = await PaymentModel.create(
-                rentDueId,
-                amount_paise,
-                payment_method,
-                reference
-            );
-
-
-            // 6. Return created payment
-            res.status(201).json(payment);
 
         } catch (error) {
             console.error("Failed to create payment:", error);
