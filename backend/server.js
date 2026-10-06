@@ -5,6 +5,7 @@ app.use(express.json());
 const PORT = 3000;
 
 // Routes
+const authRoutes = require("./routes/authRoutes");
 const organizationRoutes = require("./routes/organizationRoutes");
 const propertyRoutes = require("./routes/propertyRoutes");
 const floorRoutes = require("./routes/floorRoutes");
@@ -14,6 +15,10 @@ const tenantRoutes = require("./routes/tenantRoutes");
 const stayRoutes = require("./routes/stayRoutes");
 const rentDueRoutes = require("./routes/rentDueRoutes");
 const paymentRoutes = require("./routes/paymentRoutes");
+
+// Middleware
+const authenticate = require("./middleware/authenticate");
+
 // Health check
 app.get("/api/health", (req, res) => {
     res.json({
@@ -22,16 +27,21 @@ app.get("/api/health", (req, res) => {
     });
 });
 
-// Mount routes
+// ─── Public Routes (no JWT required) ───
+app.use("/api/auth", authRoutes);
+
+// ─── Protected Routes (JWT required) ───
+app.use(authenticate);
+
 app.use("/api/organizations", organizationRoutes);
-app.use("/api/organizations", propertyRoutes);
-app.use("/api/properties", floorRoutes);
-app.use("/api/floors", roomRoutes);
-app.use("/api/rooms", bedRoutes);
+app.use("/api/properties", propertyRoutes);
+app.use("/api/floors", floorRoutes);
+app.use("/api/rooms", roomRoutes);
+app.use("/api/beds", bedRoutes);
 app.use("/api/tenants", tenantRoutes);
 app.use("/api/stays", stayRoutes);
 app.use("/api/rent-dues", rentDueRoutes);
-app.use("/api/rent-dues", paymentRoutes);
+app.use("/api/payments", paymentRoutes);
 
 // 404 Handler (Catch-all for undefined routes)
 app.use((req, res) => {
