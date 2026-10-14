@@ -4,17 +4,17 @@ const { validateIdParam } = require("../utils/validators");
 const BedController = {
     async getByRoom(req, res) {
         try {
-            const { roomId } = req.query;
+            const { roomId } = req.listOptions;
 
             if (!roomId) {
                 return res.status(400).json({ error: "roomId query parameter is required" });
             }
             if (!validateIdParam(roomId, res, "roomId")) return;
 
-            const beds = await BedModel.getByRoom(roomId, req.user.organizationId);
+            const beds = await BedModel.getByRoom(roomId, req.user.organizationId, req.listOptions);
             res.json(beds);
         } catch (error) {
-            console.error("Failed to fetch beds:", error);
+            req.log.error({ errorName: error.name, errorCode: error.code }, "bed list failed");
             res.status(500).json({ error: "Failed to fetch beds" });
         }
     },
@@ -40,7 +40,7 @@ const BedController = {
             if (error.code === "23505") {
                 return res.status(409).json({ error: "Bed number already exists in this room" });
             }
-            console.error("Failed to create bed:", error);
+            req.log.error({ errorName: error.name, errorCode: error.code }, "bed create failed");
             res.status(500).json({ error: "Failed to create bed" });
         }
     },
@@ -69,7 +69,7 @@ const BedController = {
 
             res.json(updated);
         } catch (error) {
-            console.error("Failed to update bed status:", error);
+            req.log.error({ errorName: error.name, errorCode: error.code }, "bed status update failed");
             res.status(500).json({ error: "Failed to update bed status" });
         }
     },
@@ -86,7 +86,7 @@ const BedController = {
 
             res.json({ message: "Bed deleted" });
         } catch (error) {
-            console.error("Failed to delete bed:", error);
+            req.log.error({ errorName: error.name, errorCode: error.code }, "bed archive failed");
             res.status(500).json({ error: "Failed to delete bed" });
         }
     }

@@ -4,10 +4,10 @@ const { validateIdParam } = require("../utils/validators");
 const PropertyController = {
     async getAll(req, res) {
         try {
-            const properties = await PropertyModel.getAll(req.user.organizationId);
+            const properties = await PropertyModel.getAll(req.user.organizationId, req.listOptions);
             res.json(properties);
         } catch (error) {
-            console.error("Failed to fetch properties:", error);
+            req.log.error({ errorName: error.name, errorCode: error.code }, "property list failed");
             res.status(500).json({ error: "Failed to fetch properties" });
         }
     },
@@ -26,7 +26,7 @@ const PropertyController = {
 
             res.status(201).json(property);
         } catch (error) {
-            console.error("Failed to create property:", error);
+            req.log.error({ errorName: error.name, errorCode: error.code }, "property create failed");
             res.status(500).json({ error: "Failed to create property" });
         }
     },
@@ -51,7 +51,7 @@ const PropertyController = {
 
             res.json(updated);
         } catch (error) {
-            console.error("Failed to update property:", error);
+            req.log.error({ errorName: error.name, errorCode: error.code }, "property update failed");
             res.status(500).json({ error: "Failed to update property" });
         }
     },
@@ -68,7 +68,7 @@ const PropertyController = {
 
             res.json({ message: "Property deleted" });
         } catch (error) {
-            console.error("Failed to delete property:", error);
+            req.log.error({ errorName: error.name, errorCode: error.code }, "property archive failed");
             res.status(500).json({ error: "Failed to delete property" });
         }
     }

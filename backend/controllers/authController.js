@@ -104,7 +104,7 @@ const AuthController = {
             }
 
         } catch (error) {
-            console.error("Registration failed:", error);
+            req.log.error({ errorName: error.name, errorCode: error.code }, "registration failed");
             res.status(500).json({ error: "Registration failed" });
         }
     },
@@ -137,6 +137,7 @@ const AuthController = {
                 `SELECT organization_id, role
                  FROM organization_members
                  WHERE user_id = $1
+                 AND organization_id IN (SELECT id FROM organizations WHERE archived_at IS NULL)
                  LIMIT 1`,
                 [user.id]
             );
@@ -173,8 +174,28 @@ const AuthController = {
             });
 
         } catch (error) {
-            console.error("Login failed:", error);
+            req.log.error({ errorName: error.name, errorCode: error.code }, "login failed");
             res.status(500).json({ error: "Login failed" });
+        }
+    },
+
+    async me(req, res) {
+        try {
+            const user = await UserModel.findById(req.user.userId);
+            if (!user) {
+                return res.status(404).json({ error: "User not found" });
+            }
+
+            res.json({
+                id: user.id,
+                name: user.name,
+                email: user.email,
+                role: req.user.role,
+                organizationId: req.user.organizationId
+            });
+        } catch (error) {
+            req.log.error({ errorName: error.name, errorCode: error.code }, "profile fetch failed");
+            res.status(500).json({ error: "Failed to fetch profile" });
         }
     }
 };

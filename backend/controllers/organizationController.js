@@ -4,10 +4,10 @@ const { validateIdParam } = require("../utils/validators");
 const OrganizationController = {
     async getAll(req, res) {
         try {
-            const organizations = await OrganizationModel.getByUser(req.user.userId);
+            const organizations = await OrganizationModel.getByUser(req.user.userId, req.listOptions);
             res.json(organizations);
         } catch (error) {
-            console.error("Failed to fetch organizations:", error);
+            req.log.error({ errorName: error.name, errorCode: error.code }, "organization list failed");
             res.status(500).json({ error: "Failed to fetch organizations" });
         }
     },
@@ -27,14 +27,14 @@ const OrganizationController = {
                 return res.status(400).json({ error: "name is required" });
             }
 
-            const updated = await OrganizationModel.update(id, name.trim());
+            const updated = await OrganizationModel.update(id, req.user.organizationId, name.trim());
             if (!updated) {
                 return res.status(404).json({ error: "Organization not found" });
             }
 
             res.json(updated);
         } catch (error) {
-            console.error("Failed to update organization:", error);
+            req.log.error({ errorName: error.name, errorCode: error.code }, "organization update failed");
             res.status(500).json({ error: "Failed to update organization" });
         }
     },
@@ -48,14 +48,14 @@ const OrganizationController = {
                 return res.status(403).json({ error: "Access denied" });
             }
 
-            const deleted = await OrganizationModel.delete(id);
+            const deleted = await OrganizationModel.delete(id, req.user.organizationId);
             if (!deleted) {
                 return res.status(404).json({ error: "Organization not found" });
             }
 
             res.json({ message: "Organization deleted" });
         } catch (error) {
-            console.error("Failed to delete organization:", error);
+            req.log.error({ errorName: error.name, errorCode: error.code }, "organization archive failed");
             res.status(500).json({ error: "Failed to delete organization" });
         }
     }

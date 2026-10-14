@@ -1,3 +1,4 @@
+import { useLocation, useNavigate } from "react-router-dom";
 import {
   DashboardIcon,
   PropertiesIcon,
@@ -10,15 +11,34 @@ import {
   PaymentsIcon,
 } from "./Icons";
 
-function Sidebar({ activePage, setActivePage, mobileOpen, closeMobileSidebar, onOpenOrgModal }) {
-  const menuItem = (name, IconComponent) => {
+function Sidebar({ mobileOpen, closeMobileSidebar, onOpenOrgModal }) {
+  const location = useLocation();
+  const navigate = useNavigate();
+
+  const getActivePageName = () => {
+    const path = location.pathname;
+    if (path === "/") return "Dashboard";
+    if (path.startsWith("/properties")) return "Properties";
+    if (path.startsWith("/floors")) return "Floors";
+    if (path.startsWith("/rooms")) return "Rooms";
+    if (path.startsWith("/beds")) return "Beds";
+    if (path.startsWith("/tenants")) return "Tenants";
+    if (path.startsWith("/stays")) return "Stays";
+    if (path.startsWith("/rent-dues")) return "Rent Due";
+    if (path.startsWith("/payments")) return "Payments";
+    return "Dashboard";
+  };
+
+  const activePage = getActivePageName();
+
+  const menuItem = (name, IconComponent, path) => {
     const isActive = activePage === name;
     return (
       <button
         type="button"
         className={`nav-item ${isActive ? "active" : ""}`}
         onClick={() => {
-          setActivePage(name);
+          navigate(path);
           if (closeMobileSidebar) closeMobileSidebar();
         }}
         aria-current={isActive ? "page" : undefined}
@@ -66,33 +86,33 @@ function Sidebar({ activePage, setActivePage, mobileOpen, closeMobileSidebar, on
           <div className="nav-section">
             <p id="nav-section-main">MAIN</p>
             <div role="group" aria-labelledby="nav-section-main">
-              {menuItem("Dashboard", DashboardIcon)}
+              {menuItem("Dashboard", DashboardIcon, "/")}
             </div>
           </div>
 
           <div className="nav-section">
             <p id="nav-section-property">PROPERTY</p>
             <div role="group" aria-labelledby="nav-section-property">
-              {menuItem("Properties", PropertiesIcon)}
-              {menuItem("Floors", FloorsIcon)}
-              {menuItem("Rooms", RoomsIcon)}
-              {menuItem("Beds", BedsIcon)}
+              {menuItem("Properties", PropertiesIcon, "/properties")}
+              {menuItem("Floors", FloorsIcon, "/floors")}
+              {menuItem("Rooms", RoomsIcon, "/rooms")}
+              {menuItem("Beds", BedsIcon, "/beds")}
             </div>
           </div>
 
           <div className="nav-section">
             <p id="nav-section-people">PEOPLE</p>
             <div role="group" aria-labelledby="nav-section-people">
-              {menuItem("Tenants", TenantsIcon)}
-              {menuItem("Stays", StaysIcon)}
+              {menuItem("Tenants", TenantsIcon, "/tenants")}
+              {menuItem("Stays", StaysIcon, "/stays")}
             </div>
           </div>
 
           <div className="nav-section">
             <p id="nav-section-finance">FINANCE</p>
             <div role="group" aria-labelledby="nav-section-finance">
-              {menuItem("Rent Due", RentDueIcon)}
-              {menuItem("Payments", PaymentsIcon)}
+              {menuItem("Rent Due", RentDueIcon, "/rent-dues")}
+              {menuItem("Payments", PaymentsIcon, "/payments")}
             </div>
           </div>
         </nav>

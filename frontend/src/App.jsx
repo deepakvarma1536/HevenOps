@@ -1,10 +1,8 @@
-import { useState } from "react";
+import { Routes, Route } from "react-router-dom";
 import "./App.css";
 
-import Sidebar from "./components/Sidebar";
-import Navbar from "./components/Navbar";
-import Modal from "./components/Modal";
-import { organization } from "./data/mockData";
+import ProtectedRoute from "./components/ProtectedRoute";
+import Layout from "./components/Layout";
 
 // Pages
 import Dashboard from "./pages/Dashboard";
@@ -16,124 +14,53 @@ import Tenants from "./pages/Tenants";
 import Stays from "./pages/Stays";
 import RentDue from "./pages/RentDue";
 import Payments from "./pages/Payments";
+import Login from "./pages/Login";
+import Register from "./pages/Register";
+
+// Tenant Pages
+import TenantLogin from "./pages/TenantLogin";
+import TenantDashboard from "./pages/TenantDashboard";
+import TenantRentDues from "./pages/TenantRentDues";
+import TenantPayments from "./pages/TenantPayments";
+import TenantProfile from "./pages/TenantProfile";
+import TenantProtectedRoute from "./components/TenantProtectedRoute";
+import TenantLayout from "./components/TenantLayout";
 
 function App() {
-  const [activePage, setActivePage] = useState("Dashboard");
-  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
-  const [isOrgModalOpen, setIsOrgModalOpen] = useState(false);
-
-  const toggleMobileSidebar = () => {
-    setMobileSidebarOpen((prev) => !prev);
-  };
-
-  const closeMobileSidebar = () => {
-    setMobileSidebarOpen(false);
-  };
-
-  const renderPage = () => {
-    switch (activePage) {
-      case "Dashboard":
-        return <Dashboard onNavigate={setActivePage} />;
-      case "Properties":
-        return <Properties onNavigate={setActivePage} />;
-      case "Floors":
-        return <Floors onNavigate={setActivePage} />;
-      case "Rooms":
-        return <Rooms onNavigate={setActivePage} />;
-      case "Beds":
-        return <Beds onNavigate={setActivePage} />;
-      case "Tenants":
-        return <Tenants onNavigate={setActivePage} />;
-      case "Stays":
-        return <Stays onNavigate={setActivePage} />;
-      case "Rent Due":
-        return <RentDue onNavigate={setActivePage} />;
-      case "Payments":
-        return <Payments onNavigate={setActivePage} />;
-      default:
-        return (
-          <section className="page-content">
-            <h2>{activePage}</h2>
-            <p>This module is under development.</p>
-          </section>
-        );
-    }
-  };
-
   return (
-    <div className="app">
-      <Sidebar
-        activePage={activePage}
-        setActivePage={setActivePage}
-        mobileOpen={mobileSidebarOpen}
-        closeMobileSidebar={closeMobileSidebar}
-        onOpenOrgModal={() => setIsOrgModalOpen(true)}
-      />
+    <Routes>
+      <Route path="/login" element={<Login />} />
+      <Route path="/register" element={<Register />} />
+      
+      <Route path="/" element={
+        <ProtectedRoute>
+          <Layout />
+        </ProtectedRoute>
+      }>
+        <Route index element={<Dashboard />} />
+        <Route path="properties" element={<Properties />} />
+        <Route path="floors" element={<Floors />} />
+        <Route path="rooms" element={<Rooms />} />
+        <Route path="beds" element={<Beds />} />
+        <Route path="tenants" element={<Tenants />} />
+        <Route path="stays" element={<Stays />} />
+        <Route path="rent-dues" element={<RentDue />} />
+        <Route path="payments" element={<Payments />} />
+      </Route>
 
-      <main className="main-content">
-        <Navbar
-          activePage={activePage}
-          toggleMobileSidebar={toggleMobileSidebar}
-          onOpenOrgModal={() => setIsOrgModalOpen(true)}
-        />
-        {renderPage()}
-      </main>
-
-      {/* Organization / Admin Profile Modal */}
-      <Modal
-        isOpen={isOrgModalOpen}
-        onClose={() => setIsOrgModalOpen(false)}
-        title={organization.name}
-        subtitle={`${organization.type} • ${organization.plan}`}
-        footer={
-          <div className="modal-actions-right">
-            <button
-              type="button"
-              className="primary-btn"
-              onClick={() => setIsOrgModalOpen(false)}
-            >
-              Close
-            </button>
-          </div>
-        }
-      >
-        <div className="org-modal-content">
-          <div className="detail-stat-row">
-            <div className="detail-box">
-              <span>Managed Properties</span>
-              <strong>{organization.totalProperties}</strong>
-            </div>
-            <div className="detail-box">
-              <span>Account Type</span>
-              <strong>Admin Owner</strong>
-            </div>
-            <div className="detail-box">
-              <span>Access Level</span>
-              <strong>Super Admin</strong>
-            </div>
-          </div>
-
-          <div className="detail-info-list" style={{ marginTop: "18px" }}>
-            <div className="detail-info-item">
-              <span className="info-label">Organization Name:</span>
-              <span className="info-val"><strong>{organization.name}</strong></span>
-            </div>
-            <div className="detail-info-item">
-              <span className="info-label">Support Email:</span>
-              <span className="info-val">{organization.supportEmail}</span>
-            </div>
-            <div className="detail-info-item">
-              <span className="info-label">Current Role:</span>
-              <span className="info-val">System Administrator (Full Permissions)</span>
-            </div>
-            <div className="detail-info-item">
-              <span className="info-label">Database Schema Mode:</span>
-              <span className="info-val">Multi-Property PG Tenancy</span>
-            </div>
-          </div>
-        </div>
-      </Modal>
-    </div>
+      {/* Tenant Routes */}
+      <Route path="/tenant/login" element={<TenantLogin />} />
+      <Route path="/tenant" element={
+        <TenantProtectedRoute>
+          <TenantLayout />
+        </TenantProtectedRoute>
+      }>
+        <Route index element={<TenantDashboard />} />
+        <Route path="rent" element={<TenantRentDues />} />
+        <Route path="payments" element={<TenantPayments />} />
+        <Route path="profile" element={<TenantProfile />} />
+      </Route>
+    </Routes>
   );
 }
 

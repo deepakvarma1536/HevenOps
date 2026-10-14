@@ -4,10 +4,10 @@ const { validateIdParam } = require("../utils/validators");
 const TenantController = {
     async getAll(req, res) {
         try {
-            const tenants = await TenantModel.getAll(req.user.organizationId);
+            const tenants = await TenantModel.getAll(req.user.organizationId, req.listOptions);
             res.json(tenants);
         } catch (error) {
-            console.error("Failed to fetch tenants:", error);
+            req.log.error({ errorName: error.name, errorCode: error.code }, "tenant list failed");
             res.status(500).json({ error: "Failed to fetch tenants" });
         }
     },
@@ -24,7 +24,7 @@ const TenantController = {
 
             res.json(tenant);
         } catch (error) {
-            console.error("Failed to fetch tenant:", error);
+            req.log.error({ errorName: error.name, errorCode: error.code }, "tenant fetch failed");
             res.status(500).json({ error: "Failed to fetch tenant" });
         }
     },
@@ -46,7 +46,7 @@ const TenantController = {
 
             res.status(201).json(tenant);
         } catch (error) {
-            console.error("Failed to create tenant:", error);
+            req.log.error({ errorName: error.name, errorCode: error.code }, "tenant create failed");
             res.status(500).json({ error: "Failed to create tenant" });
         }
     },
@@ -76,8 +76,30 @@ const TenantController = {
 
             res.json(updated);
         } catch (error) {
-            console.error("Failed to update tenant:", error);
+            req.log.error({ errorName: error.name, errorCode: error.code }, "tenant update failed");
             res.status(500).json({ error: "Failed to update tenant" });
+        }
+    },
+
+    async delete(req, res) {
+        try {
+            const { id } = req.params;
+            if (!validateIdParam(id, res, "id")) return;
+
+            const deleted = await TenantModel.delete(id, req.user.organizationId);
+            if (!deleted) {
+                return res.status(404).json({ error: "Tenant not found" });
+            }
+
+            res.json({ message: "Tenant deleted" });
+        } catch (error) {
+            if (error.message === "TENANT_HAS_ACTIVE_STAY") {
+                return res.status(409).json({
+                    error: "Cannot delete tenant with an active stay — checkout first"
+                });
+            }
+            req.log.error({ errorName: error.name, errorCode: error.code }, "tenant archive failed");
+            res.status(500).json({ error: "Failed to delete tenant" });
         }
     }
 };

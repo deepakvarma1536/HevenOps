@@ -4,17 +4,17 @@ const { validateIdParam } = require("../utils/validators");
 const RoomController = {
     async getByFloor(req, res) {
         try {
-            const { floorId } = req.query;
+            const { floorId } = req.listOptions;
 
             if (!floorId) {
                 return res.status(400).json({ error: "floorId query parameter is required" });
             }
             if (!validateIdParam(floorId, res, "floorId")) return;
 
-            const rooms = await RoomModel.getByFloor(floorId, req.user.organizationId);
+            const rooms = await RoomModel.getByFloor(floorId, req.user.organizationId, req.listOptions);
             res.json(rooms);
         } catch (error) {
-            console.error("Failed to fetch rooms:", error);
+            req.log.error({ errorName: error.name, errorCode: error.code }, "room list failed");
             res.status(500).json({ error: "Failed to fetch rooms" });
         }
     },
@@ -41,7 +41,7 @@ const RoomController = {
             if (error.code === "23505") {
                 return res.status(409).json({ error: "Room number already exists on this floor" });
             }
-            console.error("Failed to create room:", error);
+            req.log.error({ errorName: error.name, errorCode: error.code }, "room create failed");
             res.status(500).json({ error: "Failed to create room" });
         }
     },
@@ -69,7 +69,7 @@ const RoomController = {
             if (error.code === "23505") {
                 return res.status(409).json({ error: "Room number already exists on this floor" });
             }
-            console.error("Failed to update room:", error);
+            req.log.error({ errorName: error.name, errorCode: error.code }, "room update failed");
             res.status(500).json({ error: "Failed to update room" });
         }
     },
@@ -86,7 +86,7 @@ const RoomController = {
 
             res.json({ message: "Room deleted" });
         } catch (error) {
-            console.error("Failed to delete room:", error);
+            req.log.error({ errorName: error.name, errorCode: error.code }, "room archive failed");
             res.status(500).json({ error: "Failed to delete room" });
         }
     }

@@ -1,16 +1,30 @@
 const pool = require("../config/db");
+const { paginateQuery } = require("../utils/pagination");
 
 const RoomModel = {
-    async getByFloor(floorId, organizationId) {
-        const result = await pool.query(
-            `SELECT r.* FROM rooms r
+    async getByFloor(floorId, organizationId, options = {}) {
+        const values = [floorId, organizationId];
+        let fromWhere = `FROM rooms r
              JOIN floors f ON r.floor_id = f.id
              JOIN properties p ON f.property_id = p.id
              WHERE r.floor_id = $1 AND p.organization_id = $2
-             ORDER BY r.id`,
-            [floorId, organizationId]
-        );
-        return result.rows;
+               AND r.archived_at IS NULL AND f.archived_at IS NULL AND p.archived_at IS NULL`;
+        if (options.search) {
+            values.push(`%${options.search}%`);
+            fromWhere += ` AND r.room_number ILIKE $${values.length}`;
+        }
+        if (options.room_type) {
+            values.push(options.room_type);
+            fromWhere += ` AND r.room_type = $${values.length}`;
+        }
+        return paginateQuery(pool, {
+            select: "SELECT r.id, r.floor_id, r.room_number, r.room_type, r.created_at, r.updated_at",
+            fromWhere,
+            values,
+            ...options,
+            sortColumns: { id: "r.id", room_number: "r.room_number", room_type: "r.room_type", created_at: "r.created_at" },
+            tieColumn: "r.id",
+        });
     },
 
     async getById(id, organizationId) {
@@ -18,7 +32,8 @@ const RoomModel = {
             `SELECT r.* FROM rooms r
              JOIN floors f ON r.floor_id = f.id
              JOIN properties p ON f.property_id = p.id
-             WHERE r.id = $1 AND p.organization_id = $2`,
+             WHERE r.id = $1 AND p.organization_id = $2
+               AND r.archived_at IS NULL AND f.archived_at IS NULL AND p.archived_at IS NULL`,
             [id, organizationId]
         );
         return result.rows[0];
@@ -29,7 +44,8 @@ const RoomModel = {
         const check = await pool.query(
             `SELECT f.id FROM floors f
              JOIN properties p ON f.property_id = p.id
-             WHERE f.id = $1 AND p.organization_id = $2`,
+             WHERE f.id = $1 AND p.organization_id = $2
+               AND f.archived_at IS NULL AND p.archived_at IS NULL`,
             [floorId, organizationId]
         );
         if (check.rows.length === 0) return null;
@@ -46,10 +62,10 @@ const RoomModel = {
     async update(id, roomNumber, roomType, organizationId) {
         const result = await pool.query(
             `UPDATE rooms SET room_number = $1, room_type = $2
-             WHERE id = $3 AND floor_id IN (
+             WHERE id = $3 AND archived_at IS NULL AND floor_id IN (
                  SELECT f.id FROM floors f
                  JOIN properties p ON f.property_id = p.id
-                 WHERE p.organization_id = $4
+                 WHERE p.organization_id = $4 AND f.archived_at IS NULL AND p.archived_at IS NULL
              )
              RETURNING *`,
             [roomNumber, roomType, id, organizationId]
@@ -59,11 +75,11 @@ const RoomModel = {
 
     async delete(id, organizationId) {
         const result = await pool.query(
-            `DELETE FROM rooms
-             WHERE id = $1 AND floor_id IN (
+            `UPDATE rooms SET archived_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+             WHERE id = $1 AND archived_at IS NULL AND floor_id IN (
                  SELECT f.id FROM floors f
                  JOIN properties p ON f.property_id = p.id
-                 WHERE p.organization_id = $2
+                 WHERE p.organization_id = $2 AND f.archived_at IS NULL AND p.archived_at IS NULL
              )
              RETURNING id`,
             [id, organizationId]

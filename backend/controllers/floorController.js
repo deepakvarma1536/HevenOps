@@ -4,17 +4,17 @@ const { validateIdParam } = require("../utils/validators");
 const FloorController = {
     async getByProperty(req, res) {
         try {
-            const { propertyId } = req.query;
+            const { propertyId } = req.listOptions;
 
             if (!propertyId) {
                 return res.status(400).json({ error: "propertyId query parameter is required" });
             }
             if (!validateIdParam(propertyId, res, "propertyId")) return;
 
-            const floors = await FloorModel.getByProperty(propertyId, req.user.organizationId);
+            const floors = await FloorModel.getByProperty(propertyId, req.user.organizationId, req.listOptions);
             res.json(floors);
         } catch (error) {
-            console.error("Failed to fetch floors:", error);
+            req.log.error({ errorName: error.name, errorCode: error.code }, "floor list failed");
             res.status(500).json({ error: "Failed to fetch floors" });
         }
     },
@@ -37,7 +37,7 @@ const FloorController = {
 
             res.status(201).json(floor);
         } catch (error) {
-            console.error("Failed to create floor:", error);
+            req.log.error({ errorName: error.name, errorCode: error.code }, "floor create failed");
             res.status(500).json({ error: "Failed to create floor" });
         }
     },
@@ -59,7 +59,7 @@ const FloorController = {
 
             res.json(updated);
         } catch (error) {
-            console.error("Failed to update floor:", error);
+            req.log.error({ errorName: error.name, errorCode: error.code }, "floor update failed");
             res.status(500).json({ error: "Failed to update floor" });
         }
     },
@@ -76,7 +76,7 @@ const FloorController = {
 
             res.json({ message: "Floor deleted" });
         } catch (error) {
-            console.error("Failed to delete floor:", error);
+            req.log.error({ errorName: error.name, errorCode: error.code }, "floor archive failed");
             res.status(500).json({ error: "Failed to delete floor" });
         }
     }

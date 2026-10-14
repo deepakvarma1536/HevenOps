@@ -1,0 +1,115 @@
+name: Quality
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      PGPASSWORD: postgres
+      TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/hevenops_test
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/hevenops_e2e
+      JWT_SECRET: ci-only-secret-that-is-at-least-thirty-two-characters
+      NODE_ENV: test
+      PORT: 3000
+      CORS_ORIGIN: http://127.0.0.1:5173
+      LOG_LEVEL: silent
+      PLAYWRIGHT_BASE_URL: http://127.0.0.1:5173
+      E2E_API_URL: http://127.0.0.1:3000/api
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            backend/package-lock.json
+            frontend/package-lock.json
+
+      - name: Install backend dependencies
+        run: npm ci --prefix backend
+
+      - name: Install frontend dependencies
+        run: npm ci --prefix frontend
+
+      - name: Audit backend dependencies
+        run: npm audit --prefix backend --audit-level=high
+
+      - name: Audit frontend dependencies
+        run: npm audit --prefix frontend --audit-level=high
+
+      - name: Create isolated test databases
+        run: |
+          createdb --host localhost --username postgres hevenops_test
+          createdb --host localhost --username postgres hevenops_e2e
+
+      - name: Validate backend environment example
+        run: npm run env:check --prefix backend
+
+      - name: Lint backend
+        run: npm run lint --prefix backend
+
+      - name: Lint frontend
+        run: npm run lint --prefix frontend
+
+      - name: Backend unit tests and coverage
+        run: npm run test:coverage --prefix backend
+
+      - name: Backend PostgreSQL integration tests
+        run: npm run test:integration --prefix backend
+
+      - name: Frontend component tests and coverage
+        run: npm run test:coverage --prefix frontend
+
+      - name: Build frontend
+        run: npm run build --prefix frontend
+
+      - name: Validate and apply database migrations
+        run: |
+          npm run migrate:status --prefix backend
+          npm run migrate --prefix backend
+          npm run migrate:status --prefix backend
+
+      - name: Install Playwright browser
+        run: npm exec --prefix frontend -- playwright install --with-deps chromium
+
+      - name: Run browser end-to-end tests
+        run: npm run test:e2e --prefix frontend
+
+      - name: Upload coverage and browser reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: quality-reports
+          path: |
+            backend/coverage/
+            frontend/coverage/
+            frontend/playwright-report/
+            frontend/test-results/
+          if-no-files-found: ignore
