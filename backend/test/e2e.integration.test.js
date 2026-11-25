@@ -328,12 +328,16 @@ test("tenant assignment, rent generation, payment, and portal reads are scoped t
     });
     assert.equal(bed.status, 201, JSON.stringify(bed.body));
 
+    const { rows: [billingDates] } = await pool.query(
+        `SELECT to_char(CURRENT_DATE - 35, 'YYYY-MM-DD') AS move_in,
+                to_char(CURRENT_DATE - 5, 'YYYY-MM-DD') AS due_date`
+    );
     const stay = await request("/api/stays", {
         method: "POST",
         body: {
             tenantId,
             bedId: bed.body.id,
-            moveInDate: "2026-10-01",
+            moveInDate: billingDates.move_in,
             monthly_rent_paise: 125000,
         },
     });
@@ -342,30 +346,62 @@ test("tenant assignment, rent generation, payment, and portal reads are scoped t
     assert.equal(stay.body.tenant_id, tenantId);
     assert.equal(stay.body.bed_status, "OCCUPIED");
 
-    const generated = await request("/api/rent-dues/generate", {
-        method: "POST",
-        body: { dueMonth: "2026-10-01", amount_paise: 125000, dueDate: "2026-10-05" },
-    });
-    assert.equal(generated.status, 201, JSON.stringify(generated.body));
-    assert.equal(generated.body.created_count, 1);
-    rentDueId = generated.body.created[0].id;
-    assert.equal(Number(generated.body.created[0].amount_paise), 125000);
+    const automatic = await request(`/api/stays/${stayId}/rent-dues`);
+    assert.equal(automatic.status, 200, JSON.stringify(automatic.body));
+    assert.equal(automatic.body.data.length, 1);
+    const [automaticDue] = automatic.body.data;
+    assert.equal(automaticDue.due_date, billingDates.due_date);
+    assert.equal(automaticDue.billing_cycle, 1);
+    assert.equal(Number(automaticDue.amount_paise), 125000);
 
     const repeatedGeneration = await request("/api/rent-dues/generate", {
         method: "POST",
-        body: { dueMonth: "2026-10-01", amount_paise: 125000, dueDate: "2026-10-05" },
+        body: { dueMonth: automaticDue.due_month, amount_paise: 125000, dueDate: automaticDue.due_date },
     });
     assert.equal(repeatedGeneration.status, 201);
     assert.equal(repeatedGeneration.body.created_count, 0);
     assert.equal(repeatedGeneration.body.skipped_count, 1);
 
+    // Simulate a stay entered before automatic billing was available.
+    await pool.query("DELETE FROM rent_dues WHERE id = $1", [automaticDue.id]);
+    const checkout = await request(`/api/stays/${stayId}/checkout`, { method: "PATCH", body: {} });
+    assert.equal(checkout.status, 409, JSON.stringify(checkout.body));
+    assert.equal(checkout.body.error.code, "OUTSTANDING_RENT");
+    assert.equal(checkout.body.error.details.amount_remaining_paise, "125000");
+    const backfilled = await request(`/api/stays/${stayId}/rent-dues`);
+    assert.equal(backfilled.body.data.length, 1);
+    rentDueId = backfilled.body.data[0].id;
+    const currentStay = await request(`/api/stays/${stayId}`);
+    assert.equal(currentStay.body.move_out_date, null);
+    assert.equal(currentStay.body.bed_status, "OCCUPIED");
+
+    await pool.query("UPDATE rent_dues SET due_date = CURRENT_DATE - 1, status = 'DUE' WHERE id = $1", [rentDueId]);
+    const staffOverdue = await request(`/api/stays/${stayId}/rent-dues?status=OVERDUE`);
+    assert.equal(staffOverdue.status, 200, JSON.stringify(staffOverdue.body));
+    assert.equal(staffOverdue.body.data[0].status, "OVERDUE");
+    assert.equal(Number(staffOverdue.body.data[0].amount_remaining_paise), 125000);
+    const tenantOverdue = await request("/api/tenant-portal/my-rent-dues?status=OVERDUE", { token: tenantToken });
+    assert.equal(tenantOverdue.status, 200, JSON.stringify(tenantOverdue.body));
+    assert.equal(tenantOverdue.body.data[0].status, "OVERDUE");
+    assert.equal(Number(tenantOverdue.body.data[0].amount_remaining_paise), 125000);
+
+    const partialPayment = await request("/api/payments", {
+        method: "POST",
+        headers: { "Idempotency-Key": "rent-payment-partial-0001" },
+        body: { rentDueId, amount_paise: 25000, payment_method: "CASH" },
+    });
+    assert.equal(partialPayment.status, 201, JSON.stringify(partialPayment.body));
+    const partialCheckout = await request(`/api/stays/${stayId}/checkout`, { method: "PATCH", body: {} });
+    assert.equal(partialCheckout.status, 409);
+    assert.equal(partialCheckout.body.error.details.amount_remaining_paise, "100000");
+
     const payment = await request("/api/payments", {
         method: "POST",
         headers: { "Idempotency-Key": "rent-payment-key-0001" },
-        body: { rentDueId, amount_paise: 125000, payment_method: "CASH", reference: "receipt-1" },
+        body: { rentDueId, amount_paise: 100000, payment_method: "CASH", reference: "receipt-1" },
     });
     assert.equal(payment.status, 201, JSON.stringify(payment.body));
-    assert.equal(Number(payment.body.amount_paise), 125000);
+    assert.equal(Number(payment.body.amount_paise), 100000);
 
     const summary = await request(`/api/rent-dues/${rentDueId}/summary`);
     assert.equal(summary.status, 200, JSON.stringify(summary.body));
@@ -375,6 +411,17 @@ test("tenant assignment, rent generation, payment, and portal reads are scoped t
     assert.equal(tenantDues.status, 200, JSON.stringify(tenantDues.body));
     assert.equal(tenantDues.body.data.length, 1);
     assert.equal(tenantDues.body.data[0].status, "PAID");
+    assert.equal(Number(tenantDues.body.data[0].amount_remaining_paise), 0);
+
+    const spare = await request("/api/beds", { method: "POST", body: { roomId: room.body.id, bed_number: "Spare" } });
+    assert.equal(spare.status, 201);
+    for (const path of [`/api/beds/${bed.body.id}`, `/api/rooms/${room.body.id}`, `/api/floors/${floor.body.id}`, `/api/properties/${propertyId}`]) {
+        const blocked = await request(path, { method: "DELETE" });
+        assert.equal(blocked.status, 409, JSON.stringify({ path, body: blocked.body }));
+        assert.equal(blocked.body.error.code, "INVENTORY_HAS_STAYS");
+    }
+    assert.equal((await pool.query("SELECT id FROM beds WHERE room_id = $1", [room.body.id])).rowCount, 2);
+    assert.equal((await request(`/api/rent-dues/${rentDueId}/summary`)).body.status, "PAID");
 
     const adminTokenUsedAsTenant = await request("/api/tenant-portal/me", { token: ownerToken });
     assert.equal(adminTokenUsedAsTenant.status, 403);
@@ -450,4 +497,98 @@ test("isolated schema contains only the test run's tenant and stay rows", { skip
     assert.ok(propertyId);
     assert.ok(stayId);
     assert.ok(rentDueId);
+});
+
+test("scheduled rent generation fills missing dues for a partly billed month", { skip: shouldSkip }, async () => {
+    const { rows: [dates] } = await pool.query(
+        `SELECT to_char(date_trunc('month', CURRENT_DATE::timestamp) + INTERVAL '1 month', 'YYYY-MM-DD') AS due_month,
+                to_char(date_trunc('month', CURRENT_DATE::timestamp) + INTERVAL '1 month 4 days', 'YYYY-MM-DD') AS due_date,
+                to_char(date_trunc('month', CURRENT_DATE::timestamp) + INTERVAL '1 month 5 days', 'YYYY-MM-DD') AS manual_due_date`
+    );
+    const existing = await request("/api/rent-dues", {
+        method: "POST",
+        body: { stayId, dueMonth: dates.due_month, dueDate: dates.manual_due_date, amount_paise: 130000 },
+    });
+    assert.equal(existing.status, 201, JSON.stringify(existing.body));
+
+    const { rows: [newTenant] } = await pool.query(
+        "INSERT INTO tenants (organization_id, name, phone) VALUES ($1, 'October Move-In', '555-901-2000') RETURNING id",
+        [organizationId]
+    );
+    const { rows: [newStay] } = await pool.query(
+        `INSERT INTO stays (organization_id, tenant_id, bed_id, move_in_date)
+         SELECT $1, $2, b.id, CURRENT_DATE
+         FROM beds b JOIN rooms r ON r.id = b.room_id JOIN floors f ON f.id = r.floor_id
+         WHERE f.property_id = $3 AND b.bed_number = 'Spare' RETURNING id`,
+        [organizationId, newTenant.id, propertyId]
+    );
+    await pool.query(
+        "INSERT INTO stay_rate_plans (stay_id, effective_from, monthly_rent_paise) VALUES ($1, CURRENT_DATE, 900000)",
+        [newStay.id]
+    );
+
+    const payload = { dueMonth: dates.due_month, dueDate: dates.due_date };
+    const generate = () => request("/api/rent-dues/generate", {
+        method: "POST", body: { ...payload, amount_paise: 900000 },
+    });
+    assert.equal((await generate()).body.created_count, 1);
+    assert.equal((await generate()).body.created_count, 0);
+
+    const saved = await request(`/api/stays/${newStay.id}/rent-dues`);
+    assert.equal(saved.status, 200, JSON.stringify(saved.body));
+    assert.equal(saved.body.data.length, 1);
+    assert.equal(saved.body.data[0].due_month, payload.dueMonth);
+    assert.equal(saved.body.data[0].due_date, payload.dueDate);
+    assert.equal(Number(saved.body.data[0].amount_paise), 900000);
+
+    const prior = await request(`/api/stays/${stayId}/rent-dues`);
+    const manualDue = prior.body.data.find((due) => due.id === existing.body.id);
+    assert.equal(manualDue.due_date, dates.manual_due_date);
+    assert.equal(Number(manualDue.amount_paise), 130000);
+});
+
+test("automatic rent starts on day 30 and bills every 30 days even within one calendar month", { skip: shouldSkip }, async () => {
+    const { rows: [dates] } = await pool.query(
+        `WITH period AS (
+            SELECT (date_trunc('year', CURRENT_DATE::timestamp) - INTERVAL '1 year')::date AS first_due
+         )
+         SELECT to_char(first_due - 30, 'YYYY-MM-DD') AS move_in,
+                to_char(first_due - 1, 'YYYY-MM-DD') AS day_29,
+                to_char(first_due, 'YYYY-MM-DD') AS day_30,
+                to_char(first_due + 30, 'YYYY-MM-DD') AS day_60
+         FROM period`
+    );
+    const { rows: [tenant] } = await pool.query(
+        "INSERT INTO tenants (organization_id, name, phone) VALUES ($1, 'Cycle Tenant', '555-901-2001') RETURNING id",
+        [organizationId]
+    );
+    const { rows: [bed] } = await pool.query(
+        `INSERT INTO beds (room_id, bed_number)
+         SELECT r.id, 'Cycle Bed'
+         FROM beds b JOIN rooms r ON r.id = b.room_id JOIN floors f ON f.id = r.floor_id
+         WHERE f.property_id = $1 AND b.bed_number = 'Spare' RETURNING id`,
+        [propertyId]
+    );
+    const { rows: [stay] } = await pool.query(
+        "INSERT INTO stays (organization_id, tenant_id, bed_id, move_in_date) VALUES ($1, $2, $3, $4) RETURNING id",
+        [organizationId, tenant.id, bed.id, dates.move_in]
+    );
+    await pool.query(
+        "INSERT INTO stay_rate_plans (stay_id, effective_from, monthly_rent_paise) VALUES ($1, $2, 900000)",
+        [stay.id, dates.move_in]
+    );
+    const { createJobHandlers } = require("../jobs/handlers");
+    const generate = createJobHandlers()["generate-rent"];
+    const run = (runDate) => generate({ runDate });
+    const dues = async () => (await request(`/api/stays/${stay.id}/rent-dues?sortBy=due_date`)).body.data;
+    await run(dates.day_29);
+    assert.deepEqual(await dues(), []);
+    await run(dates.day_30);
+    assert.deepEqual((await dues()).map((due) => [due.billing_cycle, due.due_date]), [[1, dates.day_30]]);
+    await run(dates.day_60);
+    await run(dates.day_60);
+    const billed = await dues();
+    assert.deepEqual(billed.map((due) => [due.billing_cycle, due.due_date]), [[1, dates.day_30], [2, dates.day_60]]);
+    assert.equal(billed[0].due_month, billed[1].due_month);
+    assert.ok(billed.every((due) => Number(due.amount_paise) === 900000));
 });

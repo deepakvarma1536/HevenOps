@@ -1,5 +1,8 @@
 const pool = require("../config/db");
 const { paginateQuery } = require("../utils/pagination");
+const { ApiError } = require("../utils/apiError");
+const { rentDueBalanceJoin } = require("./rentDueBalance");
+const { ensureRentCycles } = require("./scheduledRent");
 
 const StayModel = {
     /**
@@ -30,7 +33,8 @@ const StayModel = {
         }
         return paginateQuery(pool, {
             select: `SELECT s.id, s.organization_id, s.tenant_id, s.bed_id,
-                s.move_in_date, s.move_out_date,
+                to_char(s.move_in_date, 'YYYY-MM-DD') AS move_in_date,
+                to_char(s.move_out_date, 'YYYY-MM-DD') AS move_out_date,
                 CASE WHEN s.move_out_date IS NULL THEN 'ACTIVE' ELSE 'CHECKED_OUT' END AS status,
                 s.created_at, t.name AS tenant_name, t.phone AS tenant_phone,
                 b.bed_number, r.room_number, f.name AS floor_name, p.name AS property_name`,
@@ -150,6 +154,7 @@ const StayModel = {
                  VALUES ($1, $2, $3)`,
                 [stayResult.rows[0].id, moveInDate, monthlyRentPaise]
             );
+            await ensureRentCycles(client, [stayResult.rows[0].id]);
 
             // 5. Mark bed as OCCUPIED
             await client.query(
@@ -172,16 +177,43 @@ const StayModel = {
      * Update a stay's move_in_date (only allowed while stay is active).
      */
     async update(id, organizationId, moveInDate) {
-        const result = await pool.query(
-            `UPDATE stays
-             SET move_in_date = $1
-             WHERE id = $2
-               AND organization_id = $3
-               AND move_out_date IS NULL
-             RETURNING *`,
-            [moveInDate, id, organizationId]
-        );
-        return result.rows[0];
+        const client = await pool.connect();
+        try {
+            await client.query("BEGIN");
+            const { rows: [stay] } = await client.query(
+                `SELECT move_in_date = $3::date AS same_date
+                 FROM stays WHERE id = $1 AND organization_id = $2 AND move_out_date IS NULL
+                 FOR NO KEY UPDATE`,
+                [id, organizationId, moveInDate]
+            );
+            let result;
+            if (stay) {
+                if (!stay.same_date) {
+                    const billed = await client.query(
+                        "SELECT 1 FROM rent_dues WHERE stay_id = $1 AND billing_cycle IS NOT NULL LIMIT 1", [id]
+                    );
+                    if (billed.rowCount) {
+                        throw new ApiError(409, "RENT_CYCLE_ALREADY_BILLED", "The move-in date cannot be changed after rent has been billed on this stay.");
+                    }
+                    await client.query(
+                        `UPDATE stay_rate_plans SET effective_from = $1
+                         WHERE stay_id = $2 AND effective_from = (SELECT move_in_date FROM stays WHERE id = $2)
+                           AND $1 < effective_from`,
+                        [moveInDate, id]
+                    );
+                }
+                const updated = await client.query("UPDATE stays SET move_in_date = $1 WHERE id = $2 RETURNING *", [moveInDate, id]);
+                result = updated.rows[0];
+                await ensureRentCycles(client, [id]);
+            }
+            await client.query("COMMIT");
+            return result;
+        } catch (error) {
+            await client.query("ROLLBACK");
+            throw error;
+        } finally {
+            client.release();
+        }
     },
 
     async setRatePlan(id, organizationId, effectiveFrom, monthlyRentPaise) {
@@ -217,46 +249,51 @@ const StayModel = {
      */
     async checkout(id, organizationId, moveOutDate) {
         const client = await pool.connect();
+        let remaining;
+        let checkedOutStay;
         try {
             await client.query("BEGIN");
 
             // 1. Verify stay exists, is active, and lock it
             const stayResult = await client.query(
-                `SELECT id, bed_id, move_in_date FROM stays
+                `SELECT id, bed_id, COALESCE($3::date, CURRENT_DATE) < move_in_date AS before_move_in
+                 FROM stays
                  WHERE id = $1
                    AND organization_id = $2
                    AND move_out_date IS NULL
-                 FOR UPDATE`,
-                [id, organizationId]
+                 FOR NO KEY UPDATE`,
+                [id, organizationId, moveOutDate]
             );
             if (stayResult.rows.length === 0) {
                 throw new Error("STAY_NOT_FOUND_OR_ALREADY_ENDED");
             }
 
-            const moveInDate = String(stayResult.rows[0].move_in_date).slice(0, 10);
-            if (moveOutDate < moveInDate) {
+            if (stayResult.rows[0].before_move_in) {
                 throw new Error("MOVE_OUT_BEFORE_MOVE_IN");
             }
 
-            const { bed_id } = stayResult.rows[0];
-
-            // 2. Set move_out_date
-            const updatedStay = await client.query(
-                `UPDATE stays
-                 SET move_out_date = $1
-                 WHERE id = $2
-                 RETURNING *`,
-                [moveOutDate, id]
+            await ensureRentCycles(client, [id], moveOutDate);
+            // Lock dues before reading payments so checkout sees any in-flight payment or reversal.
+            await client.query("SELECT id FROM rent_dues WHERE stay_id = $1 ORDER BY id FOR UPDATE", [id]);
+            const balance = await client.query(
+                `SELECT COALESCE(SUM(rd.amount_paise - balance.net_paid), 0) AS remaining_paise
+                 FROM rent_dues rd
+                 ${rentDueBalanceJoin}
+                 WHERE rd.stay_id = $1 AND rd.amount_paise > balance.net_paid`,
+                [id]
             );
-
-            // 3. Mark bed as VACANT
-            await client.query(
-                `UPDATE beds SET status = 'VACANT' WHERE id = $1`,
-                [bed_id]
-            );
+            remaining = balance.rows[0].remaining_paise;
+            if (remaining === "0") {
+                const updatedStay = await client.query(
+                    `UPDATE stays SET move_out_date = COALESCE($1::date, CURRENT_DATE)
+                     WHERE id = $2 RETURNING *`,
+                    [moveOutDate, id]
+                );
+                checkedOutStay = updatedStay.rows[0];
+                await client.query("UPDATE beds SET status = 'VACANT' WHERE id = $1", [stayResult.rows[0].bed_id]);
+            }
 
             await client.query("COMMIT");
-            return updatedStay.rows[0];
 
         } catch (error) {
             await client.query("ROLLBACK");
@@ -264,6 +301,12 @@ const StayModel = {
         } finally {
             client.release();
         }
+        if (!checkedOutStay) {
+            throw new ApiError(409, "OUTSTANDING_RENT", "Record the outstanding rent payment before checking out.", {
+                amount_remaining_paise: remaining,
+            });
+        }
+        return checkedOutStay;
     }
 };
 

@@ -1,20 +1,16 @@
 const pool = require("../config/db");
 const { paginateQuery } = require("../utils/pagination");
+const { netPaidFor, rentDueStatus } = require("./rentDueBalance");
 
-const netPaidQuery = `
-    SELECT COALESCE(SUM(p.amount_paise), 0) - COALESCE((
-        SELECT SUM(pr.amount_paise) FROM payment_reversals pr
-        JOIN payments reversed_payment ON reversed_payment.id = pr.payment_id
-        WHERE reversed_payment.rent_due_id = $1
-    ), 0) AS net_paid
-    FROM payments p WHERE p.rent_due_id = $1`;
+const netPaidQuery = `SELECT ${netPaidFor("$1")} AS net_paid`;
 
-const updateRentDueStatus = async (client, rentDueId, amountDue) => {
-    const totals = await client.query(netPaidQuery, [rentDueId]);
-    const netPaid = Number(totals.rows[0].net_paid);
-    const status = netPaid === 0 ? "DUE" : netPaid < Number(amountDue) ? "PARTIALLY_PAID" : "PAID";
-    await client.query("UPDATE rent_dues SET status = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2", [status, rentDueId]);
-    return netPaid;
+const updateRentDueStatus = async (client, rentDueId) => {
+    await client.query(
+        `WITH balance AS (${netPaidQuery})
+         UPDATE rent_dues rd SET status = ${rentDueStatus}, updated_at = CURRENT_TIMESTAMP
+         FROM balance WHERE rd.id = $1`,
+        [rentDueId]
+    );
 };
 
 const PaymentModel = {
@@ -51,15 +47,15 @@ const PaymentModel = {
                  WHERE rd.id = $1 AND s.organization_id = $2 FOR UPDATE OF rd`, [rentDueId, organizationId]
             );
             if (!due.rows.length) throw new Error("NOT_FOUND");
-            const netPaid = await updateRentDueStatus(client, rentDueId, due.rows[0].amount_paise);
-            const remaining = Number(due.rows[0].amount_paise) - netPaid;
+            const totals = await client.query(netPaidQuery, [rentDueId]);
+            const remaining = Number(due.rows[0].amount_paise) - Number(totals.rows[0].net_paid);
             if (amountPaise > remaining) throw new Error(`OVERPAYMENT:${remaining}`);
             const inserted = await client.query(
                 `INSERT INTO payments (rent_due_id, amount_paise, payment_date, payment_method, reference, idempotency_key)
                  VALUES ($1, $2, CURRENT_DATE, $3, $4, $5) RETURNING *`,
                 [rentDueId, amountPaise, paymentMethod || null, reference || null, idempotencyKey]
             );
-            await updateRentDueStatus(client, rentDueId, due.rows[0].amount_paise);
+            await updateRentDueStatus(client, rentDueId);
             await client.query("COMMIT");
             return { payment: inserted.rows[0], wasCreated: true };
         } catch (error) {
@@ -79,7 +75,7 @@ const PaymentModel = {
             const existing = await client.query("SELECT * FROM payment_reversals WHERE idempotency_key = $1", [idempotencyKey]);
             if (existing.rows.length) { await client.query("COMMIT"); return { reversal: existing.rows[0], wasCreated: false }; }
             const payment = await client.query(
-                `SELECT p.id, p.rent_due_id, p.amount_paise, rd.amount_paise AS due_amount
+                `SELECT p.id, p.rent_due_id, p.amount_paise
                  FROM payments p JOIN rent_dues rd ON rd.id = p.rent_due_id JOIN stays s ON s.id = rd.stay_id
                  WHERE p.id = $1 AND s.organization_id = $2 FOR UPDATE OF p, rd`, [paymentId, organizationId]
             );
@@ -91,7 +87,7 @@ const PaymentModel = {
                 `INSERT INTO payment_reversals (payment_id, amount_paise, reason, idempotency_key)
                  VALUES ($1, $2, $3, $4) RETURNING *`, [paymentId, amountPaise, reason, idempotencyKey]
             );
-            await updateRentDueStatus(client, payment.rows[0].rent_due_id, payment.rows[0].due_amount);
+            await updateRentDueStatus(client, payment.rows[0].rent_due_id);
             await client.query("COMMIT");
             return { reversal: inserted.rows[0], wasCreated: true };
         } catch (error) {

@@ -1,5 +1,6 @@
 const StayModel = require("../models/stayModel");
 const { validateIdParam, isValidIsoDate } = require("../utils/validators");
+const { ApiError } = require("../utils/apiError");
 
 const StayController = {
     /**
@@ -137,6 +138,7 @@ const StayController = {
 
             res.json(updated);
         } catch (error) {
+            if (error instanceof ApiError) throw error;
             req.log.error({ errorName: error.name, errorCode: error.code }, "stay update failed");
             res.status(500).json({ error: "Failed to update stay" });
         }
@@ -152,15 +154,7 @@ const StayController = {
             const { id } = req.params;
             if (!validateIdParam(id, res, "id")) return;
 
-            // Default to today if not provided
-            const moveOutDate = req.body.moveOutDate || new Date().toISOString().split("T")[0];
-
-            if (!isValidIsoDate(moveOutDate)) {
-                return res.status(400).json({
-                    error: "moveOutDate must be a valid date in YYYY-MM-DD format"
-                });
-            }
-
+            const { moveOutDate } = req.validated.body;
             const stay = await StayModel.checkout(id, req.user.organizationId, moveOutDate);
 
             res.json({
@@ -175,8 +169,9 @@ const StayController = {
                 });
             }
             if (error.message === "MOVE_OUT_BEFORE_MOVE_IN") {
-                return res.status(400).json({ error: "moveOutDate cannot be before moveInDate" });
+                return res.status(400).json({ error: "The checkout date cannot be before the move-in date." });
             }
+            if (error instanceof ApiError) throw error;
             req.log.error({ errorName: error.name, errorCode: error.code }, "stay checkout failed");
             res.status(500).json({ error: "Failed to process checkout" });
         }

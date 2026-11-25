@@ -236,7 +236,7 @@
       "put": { "summary": "Update move-in date", "security": [{ "BearerAuth": [] }], "requestBody": { "$ref": "#/components/requestBodies/StayUpdate" }, "responses": { "200": { "description": "Updated stay" } } }
     },
     "/stays/{id}/checkout": {
-      "patch": { "summary": "Check out tenant", "security": [{ "BearerAuth": [] }], "requestBody": { "$ref": "#/components/requestBodies/Checkout" }, "responses": { "200": { "description": "Stay checked out" } } }
+      "patch": { "summary": "Check out tenant", "security": [{ "BearerAuth": [] }], "requestBody": { "$ref": "#/components/requestBodies/Checkout" }, "responses": { "200": { "description": "Stay checked out" }, "409": { "description": "The stay has an outstanding rent balance", "$ref": "#/components/responses/ApiError" } } }
     },
     "/stays/{id}/rate-plans": {
       "post": { "summary": "Create rate plan", "security": [{ "BearerAuth": [] }], "requestBody": { "$ref": "#/components/requestBodies/RatePlan" }, "responses": { "201": { "description": "Rate plan created" } } }

@@ -12,5 +12,8 @@ reversal; correct deposit money through a `REFUND` deposit transaction. There ar
 edit or delete routes for ledger entries.
 
 Every stay starts with an agreed `monthly_rent_paise` rate plan. Use
-`POST /api/stays/:id/rate-plans` for a future rate change. Rent generation resolves
-the rate plan effective in the requested month and reports stays without one.
+`POST /api/stays/:id/rate-plans` for a future rate change. Automatic billing
+charges at 30-day intervals from move-in, using the rate in effect at the start of
+each cycle. A legacy monthly charge covers the first cycle due in its billing
+month. The manual monthly generation endpoint uses the rate at the start of the
+requested month.

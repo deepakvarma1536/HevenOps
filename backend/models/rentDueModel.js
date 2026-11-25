@@ -1,5 +1,15 @@
 const pool = require("../config/db");
 const { paginateQuery } = require("../utils/pagination");
+const { ApiError } = require("../utils/apiError");
+const { rentDueBalanceJoin, rentDueStatus } = require("./rentDueBalance");
+const { rentRateForMonth } = require("./scheduledRent");
+
+const insertManualDue = `INSERT INTO rent_dues (stay_id, due_month, amount_paise, due_date, status)
+    SELECT $1, $2, $3, $4, CASE WHEN $4::date < CURRENT_DATE THEN 'OVERDUE' ELSE 'DUE' END
+    WHERE NOT EXISTS (SELECT 1 FROM rent_dues WHERE stay_id = $1 AND due_month = $2)
+    ON CONFLICT (stay_id, due_month) WHERE billing_cycle IS NULL DO NOTHING
+    RETURNING id, stay_id, to_char(due_month, 'YYYY-MM-DD') AS due_month,
+        amount_paise, to_char(due_date, 'YYYY-MM-DD') AS due_date, status, created_at, updated_at`;
 
 const RentDueModel = {
     /**
@@ -9,20 +19,23 @@ const RentDueModel = {
         const values = [stayId, organizationId];
         let fromWhere = `FROM rent_dues rd
              JOIN stays s ON s.id = rd.stay_id
+             ${rentDueBalanceJoin}
              WHERE rd.stay_id = $1 AND s.organization_id = $2
              `;
         if (options.status) {
             values.push(options.status);
-            fromWhere += ` AND rd.status = $${values.length}`;
+            fromWhere += ` AND ${rentDueStatus} = $${values.length}`;
         }
         return paginateQuery(pool, {
             select: `SELECT rd.id, rd.stay_id, to_char(rd.due_month, 'YYYY-MM-DD') AS due_month,
-                rd.amount_paise, to_char(rd.due_date, 'YYYY-MM-DD') AS due_date,
-                rd.status, rd.created_at, rd.updated_at`,
+                rd.amount_paise, to_char(rd.due_date, 'YYYY-MM-DD') AS due_date, rd.billing_cycle,
+                balance.net_paid AS amount_paid_paise,
+                rd.amount_paise - balance.net_paid AS amount_remaining_paise,
+                ${rentDueStatus} AS status, rd.created_at, rd.updated_at`,
             fromWhere,
             values,
             ...options,
-            sortColumns: { id: "rd.id", due_month: "rd.due_month", due_date: "rd.due_date", amount_paise: "rd.amount_paise", status: "rd.status" },
+            sortColumns: { id: "rd.id", due_month: "rd.due_month", due_date: "rd.due_date", amount_paise: "rd.amount_paise", status: rentDueStatus },
             tieColumn: "rd.id",
         });
     },
@@ -33,25 +46,15 @@ const RentDueModel = {
     async getSummary(rentDueId, organizationId) {
         const result = await pool.query(
             `SELECT
-                rent_dues.id AS rent_due_id,
-                rent_dues.amount_paise AS amount_due_paise,
-                COALESCE((SELECT SUM(p.amount_paise) FROM payments p WHERE p.rent_due_id = rent_dues.id), 0) -
-                COALESCE((SELECT SUM(pr.amount_paise) FROM payment_reversals pr JOIN payments p ON p.id = pr.payment_id WHERE p.rent_due_id = rent_dues.id), 0)
-                    AS amount_paid_paise,
-                rent_dues.amount_paise -
-                    (COALESCE((SELECT SUM(p.amount_paise) FROM payments p WHERE p.rent_due_id = rent_dues.id), 0) -
-                     COALESCE((SELECT SUM(pr.amount_paise) FROM payment_reversals pr JOIN payments p ON p.id = pr.payment_id WHERE p.rent_due_id = rent_dues.id), 0)) AS amount_remaining_paise,
-                CASE
-                    WHEN COALESCE((SELECT SUM(p.amount_paise) FROM payments p WHERE p.rent_due_id = rent_dues.id), 0) - COALESCE((SELECT SUM(pr.amount_paise) FROM payment_reversals pr JOIN payments p ON p.id = pr.payment_id WHERE p.rent_due_id = rent_dues.id), 0) = 0
-                        THEN 'DUE'
-                    WHEN COALESCE((SELECT SUM(p.amount_paise) FROM payments p WHERE p.rent_due_id = rent_dues.id), 0) - COALESCE((SELECT SUM(pr.amount_paise) FROM payment_reversals pr JOIN payments p ON p.id = pr.payment_id WHERE p.rent_due_id = rent_dues.id), 0) < rent_dues.amount_paise
-                        THEN 'PARTIALLY_PAID'
-                    ELSE 'PAID'
-                END AS status
-             FROM rent_dues
-             JOIN stays ON stays.id = rent_dues.stay_id
-             WHERE rent_dues.id = $1 AND stays.organization_id = $2
-             GROUP BY rent_dues.id, rent_dues.amount_paise`,
+                rd.id AS rent_due_id,
+                rd.amount_paise AS amount_due_paise,
+                balance.net_paid AS amount_paid_paise,
+                rd.amount_paise - balance.net_paid AS amount_remaining_paise,
+                ${rentDueStatus} AS status
+             FROM rent_dues rd
+             JOIN stays s ON s.id = rd.stay_id
+             ${rentDueBalanceJoin}
+             WHERE rd.id = $1 AND s.organization_id = $2`,
             [rentDueId, organizationId]
         );
 
@@ -70,20 +73,17 @@ const RentDueModel = {
             // Verify stay belongs to this organization
             const stayCheck = await client.query(
                 `SELECT id FROM stays
-                 WHERE id = $1 AND organization_id = $2`,
+                 WHERE id = $1 AND organization_id = $2 FOR NO KEY UPDATE`,
                 [stayId, organizationId]
             );
             if (stayCheck.rows.length === 0) {
                 throw new Error("STAY_NOT_FOUND");
             }
 
-            const result = await client.query(
-                `INSERT INTO rent_dues (stay_id, due_month, amount_paise, due_date)
-                 VALUES ($1, $2, $3, $4)
-                 RETURNING id, stay_id, to_char(due_month, 'YYYY-MM-DD') AS due_month,
-                    amount_paise, to_char(due_date, 'YYYY-MM-DD') AS due_date, status, created_at, updated_at`,
-                [stayId, dueMonth, amountPaise, dueDate]
-            );
+            const result = await client.query(insertManualDue, [stayId, dueMonth, amountPaise, dueDate]);
+            if (!result.rows.length) {
+                throw new ApiError(409, "RENT_DUE_EXISTS", "A rent due already exists for this stay and month.");
+            }
 
             await client.query("COMMIT");
             return result.rows[0];
@@ -97,15 +97,13 @@ const RentDueModel = {
     },
 
     /**
-     * Auto-generate rent dues for all active stays in an organization
-     * for a given month.
+     * Generate manual rent dues for an organization for a given month.
      *
-     * Uses the bed's rent amount derived from the room's context.
-     * Skips stays that already have a due for that month (UNIQUE constraint).
+     * Uses the stay's rate plan effective at the start of the month.
+     * Skips stays that already have a manual or automatic due for that month.
      *
      * @param {number} organizationId
      * @param {string} dueMonth - YYYY-MM-01 format (first of the month)
-     * @param {number} amountPaise - Monthly rent per stay in paise
      * @param {string} dueDate - Due date for payment (YYYY-MM-DD)
      * @returns {{ created: Array, skipped: number }} result summary
      */
@@ -119,16 +117,11 @@ const RentDueModel = {
             const activeStays = await client.query(
                 `SELECT s.id AS stay_id, rp.monthly_rent_paise
                  FROM stays s
-                 LEFT JOIN LATERAL (
-                    SELECT monthly_rent_paise FROM stay_rate_plans
-                    WHERE stay_id = s.id AND effective_from <= $2
-                      AND (effective_to IS NULL OR effective_to >= $2)
-                    ORDER BY effective_from DESC LIMIT 1
-                 ) rp ON TRUE
+                 LEFT JOIN LATERAL (${rentRateForMonth("$2")}) rp ON TRUE
                  WHERE s.organization_id = $1
                    AND s.move_out_date IS NULL
                    AND s.move_in_date <= $2
-                 ORDER BY s.id`,
+                 ORDER BY s.id FOR NO KEY UPDATE OF s`,
                 [organizationId, dueMonth]
             );
 
@@ -141,22 +134,14 @@ const RentDueModel = {
                     missingRatePlan++;
                     continue;
                 }
-                try {
-                    const result = await client.query(
-                        `INSERT INTO rent_dues (stay_id, due_month, amount_paise, due_date)
-                         VALUES ($1, $2, $3, $4)
-                         RETURNING id, stay_id, to_char(due_month, 'YYYY-MM-DD') AS due_month,
-                            amount_paise, to_char(due_date, 'YYYY-MM-DD') AS due_date, status, created_at, updated_at`,
-                        [stay.stay_id, dueMonth, stay.monthly_rent_paise, dueDate]
-                    );
+                const result = await client.query(
+                    insertManualDue,
+                    [stay.stay_id, dueMonth, stay.monthly_rent_paise, dueDate]
+                );
+                if (result.rows.length) {
                     created.push(result.rows[0]);
-                } catch (err) {
-                    // UNIQUE violation (stay_id, due_month) — already has a due for this month
-                    if (err.code === "23505") {
-                        skipped++;
-                    } else {
-                        throw err;
-                    }
+                } else {
+                    skipped++;
                 }
             }
 

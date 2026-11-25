@@ -23,6 +23,7 @@ function TenantRentDues() {
               <th>Due Date</th>
               <th>Amount Due</th>
               <th>Amount Paid</th>
+              <th>Outstanding</th>
               <th>Status</th>
               <th>Property</th>
             </tr>
@@ -30,7 +31,7 @@ function TenantRentDues() {
           <tbody>
             {dues.length === 0 ? (
               <tr>
-                <td colSpan="6" style={{ textAlign: "center" }}>No rent dues found.</td>
+                <td colSpan="7" style={{ textAlign: "center" }}>No rent dues found.</td>
               </tr>
             ) : (
               dues.map((due) => (
@@ -39,6 +40,7 @@ function TenantRentDues() {
                   <td>{new Date(due.due_date).toLocaleDateString()}</td>
                   <td>₹{(Number(due.amount_due_paise || 0) / 100).toLocaleString('en-IN')}</td>
                   <td>₹{(Number(due.amount_paid_paise || 0) / 100).toLocaleString('en-IN')}</td>
+                  <td>₹{(Number(due.amount_remaining_paise || 0) / 100).toLocaleString('en-IN')}</td>
                   <td>
                     <span className={`status-badge ${due.status.toLowerCase()}`}>
                       {due.status}

@@ -1,5 +1,6 @@
 const pool = require('../config/db');
 const { paginateQuery } = require("../utils/pagination");
+const { rentDueBalanceJoin, rentDueStatus } = require("../models/rentDueBalance");
 
 const tenantPortalController = {
     // GET /api/tenant-portal/me
@@ -107,22 +108,23 @@ const tenantPortalController = {
                 JOIN rooms r ON b.room_id = r.id
                 JOIN floors f ON r.floor_id = f.id
                 JOIN properties p ON f.property_id = p.id
+                ${rentDueBalanceJoin}
                 WHERE s.tenant_id = $1 AND s.organization_id = $2`;
             const values = [tenantId, organizationId];
             if (req.listOptions.status) {
                 values.push(req.listOptions.status);
-                fromWhere += ` AND rd.status = $${values.length}`;
+                fromWhere += ` AND ${rentDueStatus} = $${values.length}`;
             }
             const result = await paginateQuery(pool, {
                 select: `SELECT
                     rd.id,
                     rd.stay_id,
                     rd.due_month,
+                    rd.billing_cycle,
                     rd.amount_paise AS amount_due_paise,
-                    COALESCE((SELECT SUM(pmt.amount_paise) FROM payments pmt WHERE pmt.rent_due_id = rd.id), 0) -
-                    COALESCE((SELECT SUM(pr.amount_paise) FROM payment_reversals pr JOIN payments reversed_payment ON reversed_payment.id = pr.payment_id WHERE reversed_payment.rent_due_id = rd.id), 0)
-                        AS amount_paid_paise,
-                    rd.status,
+                    balance.net_paid AS amount_paid_paise,
+                    rd.amount_paise - balance.net_paid AS amount_remaining_paise,
+                    ${rentDueStatus} AS status,
                     rd.due_date,
                     b.bed_number,
                     p.name AS property_name`,
@@ -134,7 +136,7 @@ const tenantPortalController = {
                     due_date: "rd.due_date",
                     due_month: "rd.due_month",
                     amount_paise: "rd.amount_paise",
-                    status: "rd.status",
+                    status: rentDueStatus,
                 },
                 tieColumn: "rd.id",
             });

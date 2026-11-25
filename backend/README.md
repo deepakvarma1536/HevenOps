@@ -14,6 +14,9 @@ npm run dev
 `npm run dev` restarts the API when backend files change. Use `npm start` to run
 the API without watch mode.
 
+Run `npm run worker` in a separate terminal to generate 30-day rent dues. Use
+`GET /ready/jobs` to check that the API sees the worker's heartbeat.
+
 `DATABASE_URL` takes precedence over the individual `DB_*` connection values. The pool is limited by `DB_POOL_MAX`, `DB_CONNECTION_TIMEOUT_MS`, and `DB_IDLE_TIMEOUT_MS`. Production requires `DB_SSL=true` and an explicit CORS allow-list.
 
 Check `GET /ready` to confirm the API can connect to PostgreSQL. If signup or login returns `DATABASE_NOT_READY` and the API logs PostgreSQL error `28000`, verify that the configured role exists on the PostgreSQL instance in `DATABASE_URL`. Restart the API after editing `.env`.

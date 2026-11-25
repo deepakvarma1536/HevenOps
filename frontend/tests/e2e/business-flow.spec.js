@@ -110,7 +110,9 @@ test('register, login, manage a stay, generate and pay rent, and activate an inv
   await page.goto('/stays');
   await page.getByLabel('Tenant', { exact: true }).selectOption({ label: tenantName });
   await page.getByLabel('Available bed').selectOption({ label: `${propertyName} — G-01 — B-01` });
-  await page.getByLabel('Move-in date').fill('2026-10-01');
+  const moveIn = new Date();
+  moveIn.setUTCDate(moveIn.getUTCDate() - 35);
+  await page.getByLabel('Move-in date').fill(moveIn.toISOString().slice(0, 10));
   await page.getByLabel('Monthly rent (₹)').fill('1250');
   await page.getByRole('button', { name: 'Save' }).click();
   await expect(page.getByRole('cell', { name: tenantName })).toBeVisible();
@@ -120,29 +122,40 @@ test('register, login, manage a stay, generate and pay rent, and activate an inv
   const stay = (await stayListResponse.json()).data.find((row) => row.tenant_name === tenantName);
   expect(stay).toBeTruthy();
 
-  const generateResponse = await request.post(`${apiUrl}/rent-dues/generate`, {
+  const duesResponse = await request.get(`${apiUrl}/stays/${stay.id}/rent-dues`, {
     headers: authHeaders(staffToken),
-    data: {
-      dueMonth: '2026-11-01',
-      // Required by request validation; generated dues use the stay's rate plan.
-      amount_paise: 125000,
-      dueDate: '2026-11-05',
-    },
   });
-  expect(generateResponse.status(), await generateResponse.text()).toBe(201);
-  const generatedDues = await generateResponse.json();
-  expect(generatedDues.created_count).toBe(1);
-  expect(Number(generatedDues.created[0].amount_paise)).toBe(125000);
+  expect(duesResponse.status(), await duesResponse.text()).toBe(200);
+  const { data: dues } = await duesResponse.json();
+  expect(dues).toHaveLength(1);
+  expect(Number(dues[0].amount_paise)).toBe(125000);
+
+  page.once('dialog', (dialog) => dialog.accept());
+  await page.getByRole('row', { name: new RegExp(tenantName) }).getByRole('button', { name: 'Check out' }).click();
+  await expect(page.getByRole('alert')).toHaveText('Record the outstanding rent payment before checking out.');
 
   await page.goto('/payments');
-  const dueOption = `${tenantName} — November 2026 — ₹1,250 remaining`;
+  const rentMonth = new Intl.DateTimeFormat('en-IN', { month: 'long', year: 'numeric', timeZone: 'UTC' })
+    .format(new Date(dues[0].due_month));
+  const dueOption = `${tenantName} — ${rentMonth} · Cycle 1 — ₹1,250 remaining`;
   await page.getByLabel('Outstanding rent due').selectOption({ label: dueOption });
-  await page.getByLabel('Payment amount (₹)').fill('1250');
+  await page.getByLabel('Payment amount (₹)').fill('250');
+  await page.getByLabel('Payment method').selectOption('UPI');
+  const withoutReference = page.waitForResponse((response) =>
+    response.url().endsWith('/api/payments') && response.request().method() === 'POST');
+  await page.getByRole('button', { name: 'Save' }).click();
+  const payment = await withoutReference;
+  expect(payment.status()).toBe(201);
+  expect((await payment.json()).reference).toBeNull();
+
+  const remainingOption = `${tenantName} — ${rentMonth} · Cycle 1 — ₹1,000 remaining`;
+  await page.getByLabel('Outstanding rent due').selectOption({ label: remainingOption });
+  await page.getByLabel('Payment amount (₹)').fill('1000');
   await page.getByLabel('Payment method').selectOption('UPI');
   await page.getByLabel('Reference (optional)').fill(`receipt-${unique}`);
   await page.getByRole('button', { name: 'Save' }).click();
-  await expect(page.getByRole('cell', { name: tenantName })).toBeVisible();
-  await expect(page.getByRole('cell', { name: `receipt-${unique}` })).toBeVisible();
+  const paymentRow = page.getByRole('row').filter({ hasText: `receipt-${unique}` });
+  await expect(paymentRow.getByRole('cell', { name: tenantName })).toBeVisible();
 
   await page.goto('/tenant/login');
   await page.getByLabel('Email or Phone').fill(tenantEmail);

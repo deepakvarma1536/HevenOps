@@ -36,14 +36,22 @@ before(async () => {
             status VARCHAR(20) NOT NULL DEFAULT 'OCCUPIED'
         );
         CREATE TABLE rent_dues (
-            id BIGINT PRIMARY KEY,
+            id BIGSERIAL PRIMARY KEY,
             stay_id BIGINT NOT NULL REFERENCES stays(id),
             due_month DATE NOT NULL,
             amount_paise BIGINT NOT NULL,
             due_date DATE NOT NULL,
             status VARCHAR(20) NOT NULL DEFAULT 'DUE',
             created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-            updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            billing_cycle INTEGER
+        );
+        CREATE UNIQUE INDEX rent_dues_stay_billing_cycle_unique ON rent_dues (stay_id, billing_cycle) WHERE billing_cycle IS NOT NULL;
+        CREATE TABLE stay_rate_plans (
+            stay_id BIGINT NOT NULL REFERENCES stays(id),
+            effective_from DATE NOT NULL,
+            effective_to DATE,
+            monthly_rent_paise BIGINT NOT NULL
         );
         CREATE TABLE payments (
             id BIGSERIAL PRIMARY KEY,
@@ -68,27 +76,42 @@ before(async () => {
         );
         CREATE UNIQUE INDEX deposits_idempotency_key_unique ON deposit_transactions (idempotency_key) WHERE idempotency_key IS NOT NULL;
         INSERT INTO organizations (id, name) VALUES (1, 'Org A'), (2, 'Org B');
-        INSERT INTO beds (id) VALUES (1), (2);
-        INSERT INTO stays (id, organization_id, bed_id, move_in_date) VALUES (10, 1, 1, '2026-01-01'), (20, 2, 2, '2026-01-01');
+        INSERT INTO beds (id) VALUES (1), (2), (3), (4);
+        INSERT INTO stays (id, organization_id, bed_id, move_in_date)
+            VALUES (10, 1, 1, '2026-01-01'), (20, 2, 2, '2026-01-01'), (30, 1, 3, '2026-01-01'), (40, 2, 4, CURRENT_DATE);
         INSERT INTO rent_dues (id, stay_id, due_month, amount_paise, due_date)
-            VALUES (100, 10, '2026-01-01', 10000, '2026-01-05'),
+            VALUES (100, 10, '2026-01-01', 10000, CURRENT_DATE - 1),
+                   (101, 10, '2026-03-01', 10000, CURRENT_DATE),
                    (200, 20, '2026-01-01', 20000, '2026-01-05');
     `);
 });
 
 test('idempotency, partial payments, concurrency and reversals preserve the ledger', { skip: shouldSkip }, async () => {
+    const unpaid = await RentDueModel.getSummary(100, 1);
+    assert.equal(unpaid.status, 'OVERDUE');
+    assert.equal(Number(unpaid.amount_remaining_paise), 10000);
+    assert.equal((await RentDueModel.getSummary(101, 1)).status, 'DUE');
+    const overdueList = await RentDueModel.getByStay(10, 1, { status: 'OVERDUE', sortBy: 'status' });
+    assert.deepEqual(overdueList.data.map((due) => due.id), ['100']);
+    assert.equal(overdueList.pagination.total, 1);
+
     const first = await PaymentModel.processPayment(100, 1, 4000, 'CASH', null, 'payment-partial-key-0001');
     assert.equal(first.wasCreated, true);
+    const partial = await RentDueModel.getSummary(100, 1);
+    assert.equal(partial.status, 'OVERDUE');
+    assert.equal(Number(partial.amount_remaining_paise), 6000);
     const duplicate = await PaymentModel.processPayment(100, 1, 4000, 'CASH', null, 'payment-partial-key-0001');
     assert.equal(duplicate.wasCreated, false);
     const second = await PaymentModel.processPayment(100, 1, 6000, 'CASH', null, 'payment-final-key-000002');
     assert.equal(second.wasCreated, true);
+    assert.equal((await RentDueModel.getSummary(100, 1)).status, 'PAID');
     await assert.rejects(PaymentModel.processPayment(100, 1, 1, 'CASH', null, 'payment-over-key-000003'), /OVERPAYMENT/);
     const reversal = await PaymentModel.reversePayment(second.payment.id, 1, 6000, 'receipt voided', 'reversal-key-00000001');
     assert.equal(reversal.wasCreated, true);
     await assert.rejects(PaymentModel.reversePayment(second.payment.id, 1, 1, 'duplicate void', 'reversal-key-00000002'), /OVERREVERSAL/);
     const due = await pool.query('SELECT status FROM rent_dues WHERE id = 100');
-    assert.equal(due.rows[0].status, 'PARTIALLY_PAID');
+    assert.equal(due.rows[0].status, 'OVERDUE');
+    assert.equal(Number((await RentDueModel.getSummary(100, 1)).amount_remaining_paise), 6000);
 
     await pool.query(`INSERT INTO rent_dues (id, stay_id, due_month, amount_paise, due_date)
                       VALUES (300, 10, '2026-02-01', 10000, '2026-02-05')`);
@@ -108,8 +131,21 @@ test('deposit refunds are idempotent and cannot exceed collected value', { skip:
     await assert.rejects(DepositModel.create(10, 1, 'REFUND', 2001, '2026-01-02', null, 'deposit-refund-key-0002'), /INSUFFICIENT_BALANCE/);
 });
 
-test('checkout cannot precede the move-in date', { skip: shouldSkip }, async () => {
-    await assert.rejects(StayModel.checkout(10, 1, '2025-12-31'), /MOVE_OUT_BEFORE_MOVE_IN/);
+test('checkout rejects an earlier date and accepts the move-in date', { skip: shouldSkip }, async () => {
+    await assert.rejects(StayModel.checkout(30, 1, '2025-12-31'), /MOVE_OUT_BEFORE_MOVE_IN/);
+    assert.equal((await pool.query("SELECT status FROM beds WHERE id = 3")).rows[0].status, 'OCCUPIED');
+
+    await StayModel.checkout(30, 1, '2026-01-01');
+    const { rows: [row] } = await pool.query(
+        'SELECT s.move_out_date = s.move_in_date AS same_day, b.status FROM stays s JOIN beds b ON s.bed_id = b.id WHERE s.id = 30'
+    );
+    assert.deepEqual(row, { same_day: true, status: 'VACANT' });
+});
+
+test('checkout defaults to the database calendar date', { skip: shouldSkip }, async () => {
+    await StayModel.checkout(40, 2);
+    const { rows: [row] } = await pool.query('SELECT move_out_date = CURRENT_DATE AS today FROM stays WHERE id = 40');
+    assert.equal(row.today, true);
 });
 
 after(async () => {

@@ -26,7 +26,7 @@ export default function Payments() {
             .filter((due) => due.remainingAmount > 0)
             .map((due) => ({
               value: due.id,
-              label: `${due.tenant} — ${due.dueMonth} — ₹${due.remainingAmount.toLocaleString('en-IN')} remaining`,
+              label: `${due.tenant} — ${due.dueMonth}${due.billing_cycle ? ` · Cycle ${due.billing_cycle}` : ''} — ₹${due.remainingAmount.toLocaleString('en-IN')} remaining`,
             })) || [],
         },
         {
@@ -53,7 +53,7 @@ export default function Payments() {
         rentDueId: Number(values.rentDueId),
         amount_paise: Math.round(Number(values.amount) * 100),
         payment_method: values.payment_method,
-        reference: values.reference.trim() || null,
+        reference: values.reference?.trim() || null,
       }, {
         headers: { 'Idempotency-Key': idempotencyKey },
       })}

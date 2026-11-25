@@ -1,4 +1,5 @@
 import ApiResourcePage from '../components/ApiResourcePage';
+import StatusBadge from '../components/StatusBadge';
 import { staffApi } from '../api/client';
 import { loadRentDues } from '../api/dataApi';
 
@@ -6,7 +7,7 @@ export default function RentDue() {
   return (
     <ApiResourcePage
       title="Rent dues"
-      description="Create and review rent dues for active tenant stays."
+      description="Rent is charged every 30 days from move-in. Unpaid balances become overdue after the due date."
       loader={loadRentDues}
       selectRows={(data) => data.dues}
       columns={[
@@ -17,7 +18,8 @@ export default function RentDue() {
         { key: 'dueDate', label: 'Due date' },
         { key: 'amount', label: 'Due (₹)', render: (due) => due.amount.toLocaleString('en-IN') },
         { key: 'amountPaid', label: 'Paid (₹)', render: (due) => due.amountPaid.toLocaleString('en-IN') },
-        { key: 'status', label: 'Status' },
+        { key: 'remainingAmount', label: 'Outstanding (₹)', render: (due) => due.remainingAmount.toLocaleString('en-IN') },
+        { key: 'status', label: 'Status', render: (due) => <StatusBadge status={due.status} /> },
       ]}
       fields={[
         {

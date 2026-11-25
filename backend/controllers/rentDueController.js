@@ -1,5 +1,6 @@
 const RentDueModel = require("../models/rentDueModel");
 const { validateIdParam, isValidIsoDate } = require("../utils/validators");
+const { ApiError } = require("../utils/apiError");
 
 const RentDueController = {
     /**
@@ -103,6 +104,7 @@ const RentDueController = {
             if (error.message === "STAY_NOT_FOUND") {
                 return res.status(404).json({ error: "Stay not found in your organization" });
             }
+            if (error instanceof ApiError) throw error;
             // UNIQUE constraint violation — duplicate due for this stay+month
             if (error.code === "23505") {
                 return res.status(409).json({

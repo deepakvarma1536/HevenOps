@@ -99,21 +99,18 @@ export async function loadRentDues(signal) {
   const stays = await loadStays(signal);
   const rows = await Promise.all(stays.map(async (stay) => {
     const dues = await getAll(`/stays/${stay.id}/rent-dues`, {}, signal);
-    return Promise.all(dues.map(async (due) => {
-      const summary = (await staffApi.get(`/rent-dues/${due.id}/summary`, { signal })).data;
-      return {
-        ...due,
-        tenant: stay.tenant_name,
-        room: `${stay.room_number}${stay.bed_number ? ` • ${stay.bed_number}` : ''}`,
-        property: stay.property_name,
-        dueMonth: formatRentMonth(due.due_month),
-        amount: Number(due.amount_paise) / 100,
-        amountPaid: Number(summary.amount_paid_paise) / 100,
-        remainingAmount: Number(summary.amount_remaining_paise) / 100,
-        dueDate: due.due_date,
-        status: ({ DUE: 'Due', PARTIALLY_PAID: 'Partial', PAID: 'Paid', OVERDUE: 'Overdue' })[summary.status] || summary.status,
-        stayId: stay.id,
-      };
+    return dues.map((due) => ({
+      ...due,
+      tenant: stay.tenant_name,
+      room: `${stay.room_number}${stay.bed_number ? ` • ${stay.bed_number}` : ''}`,
+      property: stay.property_name,
+      dueMonth: formatRentMonth(due.due_month),
+      amount: Number(due.amount_paise) / 100,
+      amountPaid: Number(due.amount_paid_paise) / 100,
+      remainingAmount: Number(due.amount_remaining_paise) / 100,
+      dueDate: due.due_date,
+      status: ({ DUE: 'Due', PARTIALLY_PAID: 'Partial', PAID: 'Paid', OVERDUE: 'Overdue' })[due.status] || due.status,
+      stayId: stay.id,
     }));
   }));
   return { stays, dues: rows.flat() };
