@@ -65,3 +65,26 @@ database; recreate that disposable database when you want a clean run.
 
 The GitHub Actions quality workflow runs the same checks with separate PostgreSQL
 databases for backend integration tests and browser E2E, and uses CI-only credentials.
+
+## Production-shaped local stack
+
+Install Docker Compose, copy `.env.development.example` to `.env`, replace the
+development-only database password and JWT secret, then run:
+
+```sh
+docker compose config --quiet
+docker compose up --build -d
+docker compose ps
+curl --fail http://localhost:8080/health
+curl --fail http://localhost:8080/ready
+docker compose logs --tail=100 api worker
+```
+
+Compose runs a PostgreSQL migration one-shot before starting the API and worker,
+persists local database data in the `postgres_data` volume, and serves the UI through
+an unprivileged Nginx container. The worker is a separate service. For staging, use
+`.env.staging.example` with a dedicated TLS-enabled staging database and inject all
+credential values using the staging secret manager. The production template is
+`.env.production.example`; production should use managed PostgreSQL, backups, TLS
+termination, and a secret manager rather than the Compose development database.
+See [OPERATIONS.md](./OPERATIONS.md) for deployment and recovery procedures.
