@@ -1,5 +1,6 @@
 const PropertyModel = require("../models/propertyModel");
 const { validateIdParam } = require("../utils/validators");
+const { ApiError } = require("../utils/apiError");
 
 const PropertyController = {
     async getAll(req, res) {
@@ -68,7 +69,8 @@ const PropertyController = {
 
             res.json({ message: "Property deleted" });
         } catch (error) {
-            req.log.error({ errorName: error.name, errorCode: error.code }, "property archive failed");
+            if (error instanceof ApiError) throw error;
+            req.log.error({ errorName: error.name, errorCode: error.code }, "property delete failed");
             res.status(500).json({ error: "Failed to delete property" });
         }
     }

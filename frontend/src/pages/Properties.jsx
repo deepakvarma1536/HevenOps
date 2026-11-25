@@ -16,6 +16,7 @@ export default function Properties() {
       fields={[{ name: 'name', label: 'Property name', maxLength: 100 }]}
       createRecord={(values) => staffApi.post('/properties', { name: values.name.trim() })}
       deleteRecord={(property) => staffApi.delete(`/properties/${property.id}`)}
+      deleteWarning={(property) => `Permanently delete “${property.name}” and all its floors, rooms, and beds? This cannot be undone.`}
     />
   );
 }

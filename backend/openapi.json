@@ -184,33 +184,33 @@
     },
     "/properties/{id}": {
       "patch": { "summary": "Update property", "security": [{ "BearerAuth": [] }], "requestBody": { "$ref": "#/components/requestBodies/Name" }, "responses": { "200": { "description": "Updated property" } } },
-      "delete": { "summary": "Archive property", "security": [{ "BearerAuth": [] }], "responses": { "200": { "description": "Property archived" } } }
+      "delete": { "summary": "Permanently delete the property and its floors, rooms, and beds", "security": [{ "BearerAuth": [] }], "responses": { "200": { "description": "Property deleted" }, "409": { "description": "A bed is linked to a stay" } } }
     },
     "/floors": {
       "get": { "summary": "List floors by property", "security": [{ "BearerAuth": [] }], "parameters": [{ "in": "query", "name": "propertyId", "required": true, "schema": { "type": "integer" } }], "responses": { "200": { "description": "Paginated floors" } } },
-      "post": { "summary": "Create floor", "security": [{ "BearerAuth": [] }], "requestBody": { "$ref": "#/components/requestBodies/FloorCreate" }, "responses": { "201": { "description": "Created floor" } } }
+      "post": { "summary": "Create floor", "security": [{ "BearerAuth": [] }], "requestBody": { "$ref": "#/components/requestBodies/FloorCreate" }, "responses": { "201": { "description": "Created floor" }, "409": { "description": "Floor name already exists in this property" } } }
     },
     "/floors/{id}": {
-      "patch": { "summary": "Rename floor", "security": [{ "BearerAuth": [] }], "requestBody": { "$ref": "#/components/requestBodies/FloorUpdate" }, "responses": { "200": { "description": "Floor updated" } } },
-      "delete": { "summary": "Archive floor", "security": [{ "BearerAuth": [] }], "responses": { "200": { "description": "Floor archived" } } }
+      "patch": { "summary": "Rename floor", "security": [{ "BearerAuth": [] }], "requestBody": { "$ref": "#/components/requestBodies/FloorUpdate" }, "responses": { "200": { "description": "Floor updated" }, "409": { "description": "Floor name already exists in this property" } } },
+      "delete": { "summary": "Permanently delete the floor and its rooms and beds", "security": [{ "BearerAuth": [] }], "responses": { "200": { "description": "Floor deleted" }, "409": { "description": "A bed is linked to a stay" } } }
     },
     "/rooms": {
       "get": { "summary": "List rooms by floor", "security": [{ "BearerAuth": [] }], "parameters": [{ "in": "query", "name": "floorId", "required": true, "schema": { "type": "integer" } }], "responses": { "200": { "description": "Paginated rooms" } } },
-      "post": { "summary": "Create room", "security": [{ "BearerAuth": [] }], "requestBody": { "$ref": "#/components/requestBodies/RoomCreate" }, "responses": { "201": { "description": "Created room" } } }
+      "post": { "summary": "Create room", "description": "A sharing type such as 3 Sharing sets the room's bed_capacity.", "security": [{ "BearerAuth": [] }], "requestBody": { "$ref": "#/components/requestBodies/RoomCreate" }, "responses": { "201": { "description": "Created room" }, "409": { "description": "Room number already exists in this property" } } }
     },
     "/rooms/{id}": {
-      "patch": { "summary": "Update room", "security": [{ "BearerAuth": [] }], "requestBody": { "$ref": "#/components/requestBodies/RoomUpdate" }, "responses": { "200": { "description": "Room updated" } } },
-      "delete": { "summary": "Archive room", "security": [{ "BearerAuth": [] }], "responses": { "200": { "description": "Room archived" } } }
+      "patch": { "summary": "Update room", "security": [{ "BearerAuth": [] }], "requestBody": { "$ref": "#/components/requestBodies/RoomUpdate" }, "responses": { "200": { "description": "Room updated" }, "409": { "description": "Room number already exists in this property or bed capacity is below the active bed count" } } },
+      "delete": { "summary": "Permanently delete the room and its beds", "security": [{ "BearerAuth": [] }], "responses": { "200": { "description": "Room deleted" }, "409": { "description": "A bed is linked to a stay" } } }
     },
     "/beds": {
       "get": { "summary": "List beds by room", "security": [{ "BearerAuth": [] }], "parameters": [{ "in": "query", "name": "roomId", "required": true, "schema": { "type": "integer" } }], "responses": { "200": { "description": "Paginated beds" } } },
-      "post": { "summary": "Create bed", "security": [{ "BearerAuth": [] }], "requestBody": { "$ref": "#/components/requestBodies/BedCreate" }, "responses": { "201": { "description": "Created bed" } } }
+      "post": { "summary": "Create bed", "security": [{ "BearerAuth": [] }], "requestBody": { "$ref": "#/components/requestBodies/BedCreate" }, "responses": { "201": { "description": "Created bed" }, "409": { "description": "Bed number already exists in this property or room bed capacity is reached" } } }
     },
     "/beds/{id}/status": {
       "patch": { "summary": "Update bed status", "security": [{ "BearerAuth": [] }], "requestBody": { "$ref": "#/components/requestBodies/BedStatus" }, "responses": { "200": { "description": "Bed status updated" } } }
     },
     "/beds/{id}": {
-      "delete": { "summary": "Archive bed", "security": [{ "BearerAuth": [] }], "responses": { "200": { "description": "Bed archived" } } }
+      "delete": { "summary": "Permanently delete the bed", "security": [{ "BearerAuth": [] }], "responses": { "200": { "description": "Bed deleted" }, "409": { "description": "The bed is linked to a stay" } } }
     },
     "/tenants": {
       "get": { "summary": "List tenants", "security": [{ "BearerAuth": [] }], "responses": { "200": { "description": "Paginated tenant DTOs; password hashes are excluded" } } },

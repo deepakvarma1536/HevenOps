@@ -1,5 +1,6 @@
 const FloorModel = require("../models/floorModel");
 const { validateIdParam } = require("../utils/validators");
+const { ApiError } = require("../utils/apiError");
 
 const FloorController = {
     async getByProperty(req, res) {
@@ -21,7 +22,7 @@ const FloorController = {
 
     async create(req, res) {
         try {
-            const { propertyId, name } = req.body;
+            const { propertyId, name } = req.validated.body;
 
             if (!propertyId || !name || !name.trim()) {
                 return res.status(400).json({ error: "propertyId and name are required" });
@@ -37,6 +38,8 @@ const FloorController = {
 
             res.status(201).json(floor);
         } catch (error) {
+            if (error instanceof ApiError) throw error;
+            if (error.code === "23505") return res.status(409).json({ error: "Floor name already exists in this property." });
             req.log.error({ errorName: error.name, errorCode: error.code }, "floor create failed");
             res.status(500).json({ error: "Failed to create floor" });
         }
@@ -47,7 +50,7 @@ const FloorController = {
             const { id } = req.params;
             if (!validateIdParam(id, res, "id")) return;
 
-            const { name } = req.body;
+            const { name } = req.validated.body;
             if (!name || !name.trim()) {
                 return res.status(400).json({ error: "name is required" });
             }
@@ -59,6 +62,8 @@ const FloorController = {
 
             res.json(updated);
         } catch (error) {
+            if (error instanceof ApiError) throw error;
+            if (error.code === "23505") return res.status(409).json({ error: "Floor name already exists in this property." });
             req.log.error({ errorName: error.name, errorCode: error.code }, "floor update failed");
             res.status(500).json({ error: "Failed to update floor" });
         }
@@ -76,7 +81,8 @@ const FloorController = {
 
             res.json({ message: "Floor deleted" });
         } catch (error) {
-            req.log.error({ errorName: error.name, errorCode: error.code }, "floor archive failed");
+            if (error instanceof ApiError) throw error;
+            req.log.error({ errorName: error.name, errorCode: error.code }, "floor delete failed");
             res.status(500).json({ error: "Failed to delete floor" });
         }
     }

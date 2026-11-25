@@ -49,6 +49,38 @@ describe('ApiResourcePage', () => {
     expect(loader).toHaveBeenCalledTimes(2);
   });
 
+  it('requires confirmation before permanently deleting inventory', async () => {
+    const user = userEvent.setup();
+    const floor = { id: 1, name: 'Ground' };
+    const loader = vi.fn().mockResolvedValueOnce([floor]).mockResolvedValueOnce([]);
+    const deleteRecord = vi.fn().mockResolvedValue({});
+    const warning = 'Permanently delete floor “Ground” and all its rooms and beds? This cannot be undone.';
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValueOnce(false).mockReturnValueOnce(true);
+
+    try {
+      render(<ApiResourcePage
+        title="Floors"
+        description="Manage floors"
+        loader={loader}
+        columns={[{ key: 'name', label: 'Floor' }]}
+        deleteRecord={deleteRecord}
+        deleteWarning={() => warning}
+      />);
+      const button = await screen.findByRole('button', { name: 'Delete' });
+      await user.click(button);
+      expect(confirm).toHaveBeenCalledWith(warning);
+      expect(deleteRecord).not.toHaveBeenCalled();
+      expect(screen.getByRole('cell', { name: 'Ground' })).toBeInTheDocument();
+
+      await user.click(button);
+      expect(deleteRecord).toHaveBeenCalledOnce();
+      expect(deleteRecord).toHaveBeenCalledWith(floor);
+      expect(await screen.findByRole('status')).toHaveTextContent('No floors yet');
+    } finally {
+      confirm.mockRestore();
+    }
+  });
+
   it('blocks invalid numeric input before issuing a create request', async () => {
     const createRecord = vi.fn();
     render(<ApiResourcePage
@@ -67,6 +99,31 @@ describe('ApiResourcePage', () => {
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Amount must be between 1 and the maximum.');
     expect(createRecord).not.toHaveBeenCalled();
+  });
+
+  it('shows checkout errors once next to the table', async () => {
+    const user = userEvent.setup();
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true);
+    try {
+      render(<ApiResourcePage
+        title="Stays"
+        description="Manage stays"
+        loader={async () => [{ id: 1, name: 'Tenant' }]}
+        columns={[{ key: 'name', label: 'Tenant' }]}
+        fields={[]}
+        createRecord={vi.fn()}
+        rowAction={{
+          label: 'Check out',
+          when: () => true,
+          run: vi.fn().mockRejectedValue(new Error('The checkout date cannot be before the move-in date.')),
+        }}
+      />);
+      await user.click(await screen.findByRole('button', { name: 'Check out' }));
+      expect(await screen.findByRole('alert')).toHaveTextContent('The checkout date cannot be before the move-in date.');
+      expect(screen.getByRole('form').querySelector('[role="alert"]')).toBeNull();
+    } finally {
+      confirm.mockRestore();
+    }
   });
 
   it('reuses a payment idempotency key when retrying a failed create', async () => {

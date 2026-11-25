@@ -1,5 +1,6 @@
 const pool = require("../config/db");
 const { paginateQuery } = require("../utils/pagination");
+const { deleteInventory } = require("./propertyInventory");
 
 const PropertyModel = {
     async getAll(organizationId, options = {}) {
@@ -48,14 +49,8 @@ const PropertyModel = {
         return result.rows[0];
     },
 
-    async delete(id, organizationId) {
-        const result = await pool.query(
-            `UPDATE properties SET archived_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
-             WHERE id = $1 AND organization_id = $2 AND archived_at IS NULL
-             RETURNING id`,
-            [id, organizationId]
-        );
-        return result.rows[0];
+    delete(id, organizationId) {
+        return deleteInventory("property", id, organizationId);
     }
 };
 

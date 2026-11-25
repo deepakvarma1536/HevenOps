@@ -6,7 +6,7 @@ export default function Floors() {
   return (
     <ApiResourcePage
       title="Floors"
-      description="Manage floors within each property."
+      description="Use a unique floor name within each property."
       loader={loadFloors}
       selectRows={(data) => data.floors}
       columns={[
@@ -25,6 +25,7 @@ export default function Floors() {
       ]}
       createRecord={(values) => staffApi.post('/floors', { propertyId: Number(values.propertyId), name: values.name.trim() })}
       deleteRecord={(floor) => staffApi.delete(`/floors/${floor.id}`)}
+      deleteWarning={(floor) => `Permanently delete floor “${floor.name}” and all its rooms and beds? This cannot be undone.`}
     />
   );
 }

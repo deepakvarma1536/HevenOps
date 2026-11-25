@@ -39,9 +39,9 @@ For an irreversible database failure, restore the verified pre-migration backup 
 use PostgreSQL point-in-time recovery), then deploy the prior compatible release.
 Create a new corrective migration instead of editing an applied migration.
 
-## Archival policy
+## Inventory deletion
 
-Properties, floors, rooms, beds, tenants, and organizations use `archived_at` instead
-of physical deletion. Financial tables use `ON DELETE RESTRICT`, so payments, deposits,
-rent dues, and stays cannot disappear through a parent cascade. Historical records are
-therefore retained for audit and reporting.
+Migration `007` enables permanent deletion down the property, floor, room, and bed
+hierarchy, including previously archived descendants of the selected record. An
+existing stay blocks deletion of its bed or an ancestor and the entire operation
+rolls back. Tenants and organizations still use `archived_at`.

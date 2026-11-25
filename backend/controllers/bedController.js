@@ -1,5 +1,6 @@
 const BedModel = require("../models/bedModel");
 const { validateIdParam } = require("../utils/validators");
+const { ApiError } = require("../utils/apiError");
 
 const BedController = {
     async getByRoom(req, res) {
@@ -21,7 +22,7 @@ const BedController = {
 
     async create(req, res) {
         try {
-            const { roomId, bed_number } = req.body;
+            const { roomId, bed_number } = req.validated.body;
 
             if (!roomId || !bed_number) {
                 return res.status(400).json({ error: "roomId and bed_number are required" });
@@ -37,8 +38,9 @@ const BedController = {
 
             res.status(201).json(bed);
         } catch (error) {
+            if (error instanceof ApiError) throw error;
             if (error.code === "23505") {
-                return res.status(409).json({ error: "Bed number already exists in this room" });
+                return res.status(409).json({ error: "Bed number already exists in this property." });
             }
             req.log.error({ errorName: error.name, errorCode: error.code }, "bed create failed");
             res.status(500).json({ error: "Failed to create bed" });
@@ -86,7 +88,8 @@ const BedController = {
 
             res.json({ message: "Bed deleted" });
         } catch (error) {
-            req.log.error({ errorName: error.name, errorCode: error.code }, "bed archive failed");
+            if (error instanceof ApiError) throw error;
+            req.log.error({ errorName: error.name, errorCode: error.code }, "bed delete failed");
             res.status(500).json({ error: "Failed to delete bed" });
         }
     }

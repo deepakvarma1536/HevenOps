@@ -11,6 +11,7 @@ export default function ApiResourcePage({
   fields,
   createRecord,
   deleteRecord,
+  deleteWarning,
   rowAction,
   validate,
   requiresIdempotencyKey = false,
@@ -18,6 +19,7 @@ export default function ApiResourcePage({
   const { data, loading, error, retry } = useAsyncResource(loader);
   const [formValues, setFormValues] = useState({});
   const [saving, setSaving] = useState(false);
+  const [formError, setFormError] = useState(null);
   const [actionError, setActionError] = useState(null);
   const [validationError, setValidationError] = useState('');
   const [idempotencyKey, setIdempotencyKey] = useState(null);
@@ -48,7 +50,7 @@ export default function ApiResourcePage({
       return;
     }
     setSaving(true);
-    setActionError(null);
+    setFormError(null);
     try {
       const requestKey = requiresIdempotencyKey ? idempotencyKey || crypto.randomUUID() : null;
       if (requiresIdempotencyKey && !idempotencyKey) setIdempotencyKey(requestKey);
@@ -57,7 +59,7 @@ export default function ApiResourcePage({
       setIdempotencyKey(null);
       await retry();
     } catch (requestError) {
-      setActionError(requestError);
+      setFormError(requestError);
     } finally {
       setSaving(false);
     }
@@ -96,7 +98,7 @@ export default function ApiResourcePage({
                   <select {...inputProps}>
                     <option value="">Select {field.label.toLowerCase()}</option>
                     {(options || []).map((option) => (
-                      <option key={option.value} value={option.value}>{option.label}</option>
+                      <option key={option.value} value={option.value} disabled={option.disabled}>{option.label}</option>
                     ))}
                   </select>
                 ) : field.type === 'textarea' ? (
@@ -117,9 +119,9 @@ export default function ApiResourcePage({
             );
           })}
           {validationError && <div className="auth-error" role="alert">{validationError}</div>}
-          {actionError && (
+          {formError && (
             <div className="auth-error" role="alert" aria-live="assertive">
-              {actionError.status === 401 ? 'Your session has expired. Sign in again to continue.' : actionError.message}
+              {formError.status === 401 ? 'Your session has expired. Sign in again to continue.' : formError.message}
             </div>
           )}
           <button type="submit" className="primary-btn" disabled={saving || loading}>
@@ -153,11 +155,13 @@ export default function ApiResourcePage({
                       <td>
                         <button
                           type="button"
-                          className="outline-btn"
+                          className={deleteWarning ? 'outline-btn text-danger' : 'outline-btn'}
                           onClick={async () => {
                             const action = rowAction && rowAction.when(row) ? rowAction : null;
-                            const label = action?.label || 'Archive';
-                            if (!window.confirm(`${label} this ${title.toLowerCase().replace(/s$/, '')} record?`)) return;
+                            const prompt = !action && deleteWarning
+                              ? deleteWarning(row)
+                              : `${action?.label || 'Archive'} this ${title.toLowerCase().replace(/s$/, '')} record?`;
+                            if (!window.confirm(prompt)) return;
                             setActionError(null);
                             try {
                               if (action) await action.run(row);
@@ -168,7 +172,7 @@ export default function ApiResourcePage({
                             }
                           }}
                         >
-                          {rowAction && rowAction.when(row) ? rowAction.label : 'Archive'}
+                          {rowAction && rowAction.when(row) ? rowAction.label : deleteWarning ? 'Delete' : 'Archive'}
                         </button>
                       </td>
                     )}

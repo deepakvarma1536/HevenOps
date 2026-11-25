@@ -1,5 +1,12 @@
 const pool = require("../config/db");
 const { paginateQuery } = require("../utils/pagination");
+const { ApiError } = require("../utils/apiError");
+const { bedCapacity, findActiveRoom, countActiveBeds } = require("./roomInventory");
+const { withLockedInventory, requireUniqueName, deleteInventory } = require("./propertyInventory");
+
+function withCapacity(room) {
+    return { ...room, bed_capacity: bedCapacity(room.room_type) };
+}
 
 const RoomModel = {
     async getByFloor(floorId, organizationId, options = {}) {
@@ -17,7 +24,7 @@ const RoomModel = {
             values.push(options.room_type);
             fromWhere += ` AND r.room_type = $${values.length}`;
         }
-        return paginateQuery(pool, {
+        const page = await paginateQuery(pool, {
             select: "SELECT r.id, r.floor_id, r.room_number, r.room_type, r.created_at, r.updated_at",
             fromWhere,
             values,
@@ -25,66 +32,49 @@ const RoomModel = {
             sortColumns: { id: "r.id", room_number: "r.room_number", room_type: "r.room_type", created_at: "r.created_at" },
             tieColumn: "r.id",
         });
+        return { ...page, data: page.data.map(withCapacity) };
     },
 
     async getById(id, organizationId) {
-        const result = await pool.query(
-            `SELECT r.* FROM rooms r
-             JOIN floors f ON r.floor_id = f.id
-             JOIN properties p ON f.property_id = p.id
-             WHERE r.id = $1 AND p.organization_id = $2
-               AND r.archived_at IS NULL AND f.archived_at IS NULL AND p.archived_at IS NULL`,
-            [id, organizationId]
-        );
-        return result.rows[0];
+        const room = await findActiveRoom(pool, id, organizationId);
+        return room && withCapacity(room);
     },
 
     async create(floorId, roomNumber, roomType, organizationId) {
-        // Verify floor belongs to this organization
-        const check = await pool.query(
-            `SELECT f.id FROM floors f
-             JOIN properties p ON f.property_id = p.id
-             WHERE f.id = $1 AND p.organization_id = $2
-               AND f.archived_at IS NULL AND p.archived_at IS NULL`,
-            [floorId, organizationId]
-        );
-        if (check.rows.length === 0) return null;
-
-        const result = await pool.query(
-            `INSERT INTO rooms (floor_id, room_number, room_type)
-             VALUES ($1, $2, $3)
-             RETURNING *`,
-            [floorId, roomNumber, roomType]
-        );
-        return result.rows[0];
+        return withLockedInventory("floor", floorId, organizationId, async (client, floor) => {
+            await requireUniqueName(client, "room", floor.property_id, roomNumber);
+            const result = await client.query(
+                "INSERT INTO rooms (floor_id, room_number, room_type) VALUES ($1, $2, $3) RETURNING *",
+                [floor.id, roomNumber, roomType]
+            );
+            return withCapacity(result.rows[0]);
+        });
     },
 
     async update(id, roomNumber, roomType, organizationId) {
-        const result = await pool.query(
-            `UPDATE rooms SET room_number = $1, room_type = $2
-             WHERE id = $3 AND archived_at IS NULL AND floor_id IN (
-                 SELECT f.id FROM floors f
-                 JOIN properties p ON f.property_id = p.id
-                 WHERE p.organization_id = $4 AND f.archived_at IS NULL AND p.archived_at IS NULL
-             )
-             RETURNING *`,
-            [roomNumber, roomType, id, organizationId]
-        );
-        return result.rows[0];
+        return withLockedInventory("room", id, organizationId, async (client, room) => {
+            if (roomNumber !== room.room_number) {
+                await requireUniqueName(client, "room", room.property_id, roomNumber, room.id);
+            }
+            const nextType = roomType === undefined ? room.room_type : roomType;
+            const capacity = bedCapacity(nextType);
+            if (capacity !== null && capacity !== bedCapacity(room.room_type)) {
+                const activeBeds = await countActiveBeds(client, room.id);
+                if (activeBeds > capacity) {
+                    throw new ApiError(409, "ROOM_CAPACITY_TOO_LOW", `Room ${room.room_number} already has ${activeBeds} active beds. Delete extra beds before setting a limit of ${capacity}.`);
+                }
+            }
+
+            const result = await client.query(
+                "UPDATE rooms SET room_number = $1, room_type = $2 WHERE id = $3 RETURNING *",
+                [roomNumber, nextType, room.id]
+            );
+            return withCapacity(result.rows[0]);
+        });
     },
 
-    async delete(id, organizationId) {
-        const result = await pool.query(
-            `UPDATE rooms SET archived_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
-             WHERE id = $1 AND archived_at IS NULL AND floor_id IN (
-                 SELECT f.id FROM floors f
-                 JOIN properties p ON f.property_id = p.id
-                 WHERE p.organization_id = $2 AND f.archived_at IS NULL AND p.archived_at IS NULL
-             )
-             RETURNING id`,
-            [id, organizationId]
-        );
-        return result.rows[0];
+    delete(id, organizationId) {
+        return deleteInventory("room", id, organizationId);
     }
 };
 

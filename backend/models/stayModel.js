@@ -117,7 +117,7 @@ const StayModel = {
                  WHERE b.id = $1 AND p.organization_id = $2
                    AND b.archived_at IS NULL AND r.archived_at IS NULL
                    AND f.archived_at IS NULL AND p.archived_at IS NULL
-                 FOR UPDATE`,
+                 FOR UPDATE OF b`,
                 [bedId, organizationId]
             );
             if (bedCheck.rows.length === 0) {

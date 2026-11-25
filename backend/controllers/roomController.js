@@ -1,5 +1,6 @@
 const RoomModel = require("../models/roomModel");
 const { validateIdParam } = require("../utils/validators");
+const { ApiError } = require("../utils/apiError");
 
 const RoomController = {
     async getByFloor(req, res) {
@@ -21,7 +22,7 @@ const RoomController = {
 
     async create(req, res) {
         try {
-            const { floorId, room_number, room_type } = req.body;
+            const { floorId, room_number, room_type } = req.validated.body;
 
             if (!floorId || !room_number) {
                 return res.status(400).json({ error: "floorId and room_number are required" });
@@ -37,9 +38,10 @@ const RoomController = {
 
             res.status(201).json(room);
         } catch (error) {
+            if (error instanceof ApiError) throw error;
             // Handle unique constraint violation (duplicate room number)
             if (error.code === "23505") {
-                return res.status(409).json({ error: "Room number already exists on this floor" });
+                return res.status(409).json({ error: "Room number already exists in this property." });
             }
             req.log.error({ errorName: error.name, errorCode: error.code }, "room create failed");
             res.status(500).json({ error: "Failed to create room" });
@@ -51,13 +53,13 @@ const RoomController = {
             const { id } = req.params;
             if (!validateIdParam(id, res, "id")) return;
 
-            const { room_number, room_type } = req.body;
+            const { room_number, room_type } = req.validated.body;
             if (!room_number) {
                 return res.status(400).json({ error: "room_number is required" });
             }
 
             const updated = await RoomModel.update(
-                id, room_number, room_type || null, req.user.organizationId
+                id, room_number, room_type === "" ? null : room_type, req.user.organizationId
             );
 
             if (!updated) {
@@ -66,8 +68,9 @@ const RoomController = {
 
             res.json(updated);
         } catch (error) {
+            if (error instanceof ApiError) throw error;
             if (error.code === "23505") {
-                return res.status(409).json({ error: "Room number already exists on this floor" });
+                return res.status(409).json({ error: "Room number already exists in this property." });
             }
             req.log.error({ errorName: error.name, errorCode: error.code }, "room update failed");
             res.status(500).json({ error: "Failed to update room" });
@@ -86,7 +89,8 @@ const RoomController = {
 
             res.json({ message: "Room deleted" });
         } catch (error) {
-            req.log.error({ errorName: error.name, errorCode: error.code }, "room archive failed");
+            if (error instanceof ApiError) throw error;
+            req.log.error({ errorName: error.name, errorCode: error.code }, "room delete failed");
             res.status(500).json({ error: "Failed to delete room" });
         }
     }

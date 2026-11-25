@@ -139,6 +139,135 @@ test("spends are scoped to the organization and concurrent retries record money 
     assert.equal(ownerList.body.pagination.total, 1);
 });
 
+test("sharing rooms cap active beds even when bed creation and room updates race", { skip: shouldSkip }, async () => {
+    const property = await request("/api/properties", { method: "POST", body: { name: "Sharing House" } });
+    assert.equal(property.status, 201);
+    const floor = await request("/api/floors", { method: "POST", body: { propertyId: property.body.id, name: "Ground" } });
+    assert.equal(floor.status, 201);
+    const room = await request("/api/rooms", {
+        method: "POST",
+        body: { floorId: floor.body.id, room_number: "303", room_type: "3 Sharing" },
+    });
+    assert.equal(room.status, 201);
+    assert.equal(room.body.bed_capacity, 3);
+
+    const rooms = await request(`/api/rooms?floorId=${floor.body.id}`);
+    assert.equal(rooms.body.data[0].bed_capacity, 3);
+    const addBed = (bedNumber) => request("/api/beds", {
+        method: "POST",
+        body: { roomId: room.body.id, bed_number: bedNumber },
+    });
+    const changeRoom = (body) => request(`/api/rooms/${room.body.id}`, { method: "PATCH", body });
+    assert.equal((await addBed("A")).status, 201);
+    assert.equal((await addBed("B")).status, 201);
+    const attempts = await Promise.all([addBed("C"), addBed("D")]);
+    assert.deepEqual(attempts.map(({ status }) => status).sort(), [201, 409]);
+    assert.equal(attempts.find(({ status }) => status === 409).body.error.code, "ROOM_CAPACITY_REACHED");
+
+    const renamed = await changeRoom({ room_number: "303A" });
+    assert.equal(renamed.body.bed_capacity, 3);
+    const reduced = await changeRoom({ room_number: "303A", room_type: "Double sharing" });
+    assert.equal(reduced.status, 409);
+    assert.equal(reduced.body.error.code, "ROOM_CAPACITY_TOO_LOW");
+
+    const added = attempts.find(({ status }) => status === 201);
+    assert.equal((await request(`/api/beds/${added.body.id}`, { method: "DELETE" })).status, 200);
+    const [replacement, resize] = await Promise.all([
+        addBed("E"),
+        changeRoom({ room_number: "303A", room_type: "Double sharing" }),
+    ]);
+    assert.ok(
+        (replacement.status === 201 && resize.status === 409) ||
+        (replacement.status === 409 && resize.status === 200)
+    );
+    const currentBeds = await request(`/api/beds?roomId=${room.body.id}`);
+    assert.equal(currentBeds.body.pagination.total, replacement.status === 201 ? 3 : 2);
+
+    const expanded = await changeRoom({ room_number: "303A", room_type: "4-sharing" });
+    assert.equal(expanded.body.bed_capacity, 4);
+    assert.equal((await addBed("F")).status, 201);
+});
+
+test("floor names, room numbers, and bed numbers are unique within a property", { skip: shouldSkip }, async () => {
+    async function create(path, body) {
+        const result = await request(path, { method: "POST", body });
+        assert.equal(result.status, 201, JSON.stringify(result.body));
+        return result.body;
+    }
+
+    async function expectDuplicate(path, body, code, method = "POST") {
+        const result = await request(path, { method, body });
+        assert.equal(result.status, 409, JSON.stringify(result.body));
+        assert.equal(result.body.error.code, code);
+    }
+
+    const property = await create("/api/properties", { name: "Name Check House" });
+    const other = await create("/api/properties", { name: "Other Name Check House" });
+    const ground = await create("/api/floors", { propertyId: property.id, name: "Ground" });
+    const first = await create("/api/floors", { propertyId: property.id, name: "First" });
+    const otherGround = await create("/api/floors", { propertyId: other.id, name: "Ground" });
+
+    await expectDuplicate("/api/floors", { propertyId: property.id, name: "  ground  " }, "DUPLICATE_FLOOR_NAME");
+    await expectDuplicate(`/api/floors/${first.id}`, { name: "gRoUnD" }, "DUPLICATE_FLOOR_NAME", "PATCH");
+
+    const roomA = await create("/api/rooms", { floorId: ground.id, room_number: "Room-A" });
+    const roomB = await create("/api/rooms", { floorId: first.id, room_number: "Room-B" });
+    const otherRoom = await create("/api/rooms", { floorId: otherGround.id, room_number: "Room-A" });
+    await expectDuplicate("/api/rooms", { floorId: first.id, room_number: "  room-a  " }, "DUPLICATE_ROOM_NAME");
+    await expectDuplicate(`/api/rooms/${roomB.id}`, { room_number: "Room-A" }, "DUPLICATE_ROOM_NAME", "PATCH");
+
+    const attempts = await Promise.all([roomA, roomB].map((room) => request("/api/beds", {
+        method: "POST",
+        body: { roomId: room.id, bed_number: "Bed-1" },
+    })));
+    assert.deepEqual(attempts.map(({ status }) => status).sort(), [201, 409]);
+    assert.equal(attempts.find(({ status }) => status === 409).body.error.code, "DUPLICATE_BED_NAME");
+    const bed = attempts.find(({ status }) => status === 201).body;
+    const otherRoomInProperty = bed.room_id === roomA.id ? roomB : roomA;
+    assert.equal((await request(`/api/beds/${bed.id}`, { method: "DELETE" })).status, 200);
+    const reused = await create("/api/beds", { roomId: otherRoomInProperty.id, bed_number: "  bed-1  " });
+    assert.equal(reused.bed_number, "bed-1");
+    assert.equal((await pool.query("SELECT id FROM beds WHERE id = $1", [bed.id])).rowCount, 0);
+    await create("/api/beds", { roomId: otherRoom.id, bed_number: "Bed-1" });
+});
+
+test("deleting inventory permanently removes its descendants and preserves siblings", { skip: shouldSkip }, async () => {
+    async function create(path, body) {
+        const result = await request(path, { method: "POST", body });
+        assert.equal(result.status, 201, JSON.stringify(result.body));
+        return result.body;
+    }
+
+    const property = await create("/api/properties", { name: "Delete Test House" });
+    const floor = await create("/api/floors", { propertyId: property.id, name: "Ground" });
+    const sibling = await create("/api/floors", { propertyId: property.id, name: "First" });
+    const roomA = await create("/api/rooms", { floorId: floor.id, room_number: "A" });
+    const roomB = await create("/api/rooms", { floorId: floor.id, room_number: "B" });
+    const siblingRoom = await create("/api/rooms", { floorId: sibling.id, room_number: "C" });
+    const bedA = await create("/api/beds", { roomId: roomA.id, bed_number: "A1" });
+    const bedB = await create("/api/beds", { roomId: roomB.id, bed_number: "B1" });
+    const siblingBed = await create("/api/beds", { roomId: siblingRoom.id, bed_number: "C1" });
+    await pool.query("UPDATE rooms SET archived_at = CURRENT_TIMESTAMP WHERE id = $1", [roomB.id]);
+
+    const staffToken = jwt.sign({ organizationId, role: "staff" }, jwtSecret);
+    const otherOrg = await register("delete-other-owner@example.test", "Other Delete Test House");
+    const path = `/api/floors/${floor.id}`;
+    assert.equal((await request(path, { method: "DELETE", token: staffToken })).status, 403);
+    assert.equal((await request(path, { method: "DELETE", token: otherOrg.token })).status, 404);
+    assert.equal((await request(path, { method: "DELETE" })).status, 200);
+    assert.equal((await request(path, { method: "DELETE" })).status, 404);
+
+    assert.equal((await pool.query("SELECT id FROM floors WHERE id = $1", [floor.id])).rowCount, 0);
+    assert.equal((await pool.query("SELECT id FROM rooms WHERE id = ANY($1::bigint[])", [[roomA.id, roomB.id]])).rowCount, 0);
+    assert.equal((await pool.query("SELECT id FROM beds WHERE id = ANY($1::bigint[])", [[bedA.id, bedB.id]])).rowCount, 0);
+    assert.equal((await pool.query("SELECT id FROM beds WHERE id = $1", [siblingBed.id])).rowCount, 1);
+
+    assert.equal((await request(`/api/rooms/${siblingRoom.id}`, { method: "DELETE" })).status, 200);
+    assert.equal((await pool.query("SELECT id FROM beds WHERE id = $1", [siblingBed.id])).rowCount, 0);
+    assert.equal((await request(`/api/properties/${property.id}`, { method: "DELETE" })).status, 200);
+    assert.equal((await pool.query("SELECT id FROM floors WHERE id = $1", [sibling.id])).rowCount, 0);
+});
+
 test("tenant setup invitation provisions a usable tenant portal account", { skip: shouldSkip }, async () => {
     const created = await request("/api/tenants", {
         method: "POST",

@@ -6,7 +6,7 @@ export default function Rooms() {
   return (
     <ApiResourcePage
       title="Rooms"
-      description="Manage rooms and their floor placement."
+      description="Use unique room numbers across the property. A room type such as 3 Sharing sets the bed limit."
       loader={loadRooms}
       selectRows={(data) => data.rooms}
       columns={[
@@ -14,6 +14,7 @@ export default function Rooms() {
         { key: 'floor', label: 'Floor' },
         { key: 'room_number', label: 'Room' },
         { key: 'room_type', label: 'Room type' },
+        { key: 'bed_capacity', label: 'Bed limit' },
       ]}
       fields={[
         {
@@ -31,9 +32,10 @@ export default function Rooms() {
       createRecord={(values) => staffApi.post('/rooms', {
         floorId: Number(values.floorId),
         room_number: values.room_number.trim(),
-        room_type: values.room_type.trim() || null,
+        room_type: values.room_type?.trim() || null,
       })}
       deleteRecord={(room) => staffApi.delete(`/rooms/${room.id}`)}
+      deleteWarning={(room) => `Permanently delete room “${room.room_number}” and all its beds? This cannot be undone.`}
     />
   );
 }

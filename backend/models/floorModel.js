@@ -1,5 +1,6 @@
 const pool = require("../config/db");
 const { paginateQuery } = require("../utils/pagination");
+const { withLockedInventory, requireUniqueName, deleteInventory } = require("./propertyInventory");
 
 const FloorModel = {
     async getByProperty(propertyId, organizationId, options = {}) {
@@ -34,45 +35,26 @@ const FloorModel = {
     },
 
     async create(propertyId, name, organizationId) {
-        // Verify property belongs to this organization
-        const check = await pool.query(
-            `SELECT id FROM properties
-             WHERE id = $1 AND organization_id = $2 AND archived_at IS NULL`,
-            [propertyId, organizationId]
-        );
-        if (check.rows.length === 0) return null;
-
-        const result = await pool.query(
-            `INSERT INTO floors (property_id, name)
-             VALUES ($1, $2)
-             RETURNING *`,
-            [propertyId, name]
-        );
-        return result.rows[0];
+        return withLockedInventory("property", propertyId, organizationId, async (client, property) => {
+            await requireUniqueName(client, "floor", property.property_id, name);
+            const result = await client.query(
+                "INSERT INTO floors (property_id, name) VALUES ($1, $2) RETURNING *",
+                [property.property_id, name]
+            );
+            return result.rows[0];
+        });
     },
 
     async update(id, name, organizationId) {
-        const result = await pool.query(
-            `UPDATE floors SET name = $1
-             WHERE id = $2 AND archived_at IS NULL AND property_id IN (
-                 SELECT id FROM properties WHERE organization_id = $3 AND archived_at IS NULL
-             )
-             RETURNING *`,
-            [name, id, organizationId]
-        );
-        return result.rows[0];
+        return withLockedInventory("floor", id, organizationId, async (client, floor) => {
+            if (name !== floor.name) await requireUniqueName(client, "floor", floor.property_id, name, floor.id);
+            const result = await client.query("UPDATE floors SET name = $1 WHERE id = $2 RETURNING *", [name, floor.id]);
+            return result.rows[0];
+        });
     },
 
-    async delete(id, organizationId) {
-        const result = await pool.query(
-            `UPDATE floors SET archived_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
-             WHERE id = $1 AND archived_at IS NULL AND property_id IN (
-                 SELECT id FROM properties WHERE organization_id = $2 AND archived_at IS NULL
-             )
-             RETURNING id`,
-            [id, organizationId]
-        );
-        return result.rows[0];
+    delete(id, organizationId) {
+        return deleteInventory("floor", id, organizationId);
     }
 };
 
