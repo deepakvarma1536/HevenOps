@@ -1,10 +1,18 @@
 const pool = require("../config/db");
 const { paginateQuery } = require("../utils/pagination");
 
+const { tenantProperty } = require("../middleware/propertyAccess");
+
 const TenantModel = {
     async getAll(organizationId, options = {}) {
         const values = [organizationId];
         let fromWhere = "FROM tenants t WHERE t.organization_id = $1 AND t.archived_at IS NULL";
+        if (options.managerId) {
+            values.push(options.managerId);
+            fromWhere += ` AND EXISTS (SELECT 1 FROM manager_properties mp
+                WHERE mp.organization_id = t.organization_id AND mp.user_id = $${values.length}
+                  AND mp.property_id = ${tenantProperty})`;
+        }
         if (options.search) {
             values.push(`%${options.search}%`);
             fromWhere += ` AND (t.name ILIKE $${values.length} OR t.phone ILIKE $${values.length} OR t.email ILIKE $${values.length})`;
@@ -14,7 +22,7 @@ const TenantModel = {
             fromWhere += ` AND t.is_active = $${values.length}`;
         }
         return paginateQuery(pool, {
-            select: "SELECT t.id, t.organization_id, t.name, t.phone, t.email, t.government_id, t.emergency_contact, t.is_active, t.created_at, t.updated_at",
+            select: "SELECT t.id, t.organization_id, t.name, t.phone, t.email, t.government_id, t.emergency_contact, t.is_active, t.intake_property_id AS property_id, t.created_at, t.updated_at",
             fromWhere,
             values,
             ...options,
@@ -34,13 +42,13 @@ const TenantModel = {
         return result.rows[0];
     },
 
-    async create(organizationId, name, phone, email) {
+    async create(organizationId, name, phone, email, propertyId = null) {
         const result = await pool.query(
-            `INSERT INTO tenants (organization_id, name, phone, email)
-             VALUES ($1, $2, $3, $4)
+            `INSERT INTO tenants (organization_id, name, phone, email, intake_property_id)
+             VALUES ($1, $2, $3, $4, $5)
              RETURNING id, organization_id, name, phone, email, government_id,
                        emergency_contact, is_active, created_at, updated_at`,
-            [organizationId, name, phone, email]
+            [organizationId, name, phone, email, propertyId]
         );
         return result.rows[0];
     },

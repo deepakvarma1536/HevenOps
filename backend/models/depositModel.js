@@ -1,5 +1,10 @@
+const { ApiError } = require("../utils/apiError");
 const pool = require("../config/db");
 const { paginateQuery } = require("../utils/pagination");
+
+function idempotencyConflict() {
+    return new ApiError(409, "IDEMPOTENCY_CONFLICT", "This request key was already used for another record");
+}
 
 const DepositModel = {
     /**
@@ -38,6 +43,7 @@ const DepositModel = {
                 [idempotencyKey, organizationId]
             );
             if (existing.rows.length > 0) {
+                if (String(existing.rows[0].stay_id) !== String(stayId)) throw idempotencyConflict();
                 await client.query("COMMIT");
                 return { deposit: existing.rows[0], wasCreated: false };
             }
@@ -86,7 +92,10 @@ const DepositModel = {
             await client.query("ROLLBACK");
             if (error.code === "23505") {
                 const duplicate = await pool.query("SELECT * FROM deposit_transactions WHERE idempotency_key = $1", [idempotencyKey]);
-                if (duplicate.rows.length) return { deposit: duplicate.rows[0], wasCreated: false };
+                if (duplicate.rows.length) {
+                    if (String(duplicate.rows[0].stay_id) !== String(stayId)) throw idempotencyConflict();
+                    return { deposit: duplicate.rows[0], wasCreated: false };
+                }
             }
             throw error;
         } finally {

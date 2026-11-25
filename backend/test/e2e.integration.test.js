@@ -27,7 +27,7 @@ async function request(path, { method = "GET", token = ownerToken, body, headers
         headers: requestHeaders,
         body: body === undefined ? undefined : JSON.stringify(body),
     });
-    return { status: response.status, body: await response.json() };
+    return { status: response.status, body: response.status === 204 ? null : await response.json() };
 }
 
 async function register(email, organizationName) {
@@ -596,4 +596,77 @@ test("automatic rent starts on day 30 and bills every 30 days even within one ca
     assert.deepEqual(billed.map((due) => [due.billing_cycle, due.due_date]), [[1, dates.day_30], [2, dates.day_60]]);
     assert.equal(billed[0].due_month, billed[1].due_month);
     assert.ok(billed.every((due) => Number(due.amount_paise) === 900000));
+});
+
+test("an invited manager can operate and record finances only in assigned properties", { skip: shouldSkip }, async () => {
+    const password = "manager-test-password";
+    const email = "property-manager@example.test";
+    const create = (path, body, options) => request(path, { method: "POST", body, ...options });
+    const properties = [];
+    for (const name of ["Managed East", "Managed West"]) {
+        const property = await create("/api/properties", { name, address: "Campus" });
+        assert.equal(property.status, 201);
+        const floor = await create("/api/floors", { propertyId: property.body.id, name: "Ground" });
+        const room = await create("/api/rooms", { floorId: floor.body.id, room_number: "101" });
+        const bed = await create("/api/beds", { roomId: room.body.id, bed_number: "B1" });
+        properties.push({ id: property.body.id, bed: bed.body.id });
+    }
+    const [east, west] = properties;
+    const invitation = await create("/api/managers/invites", { name: "Manager", email, propertyId: east.id });
+    assert.equal(invitation.status, 201);
+    const accept = () => create("/api/auth/manager-invite", { token: invitation.body.token, password }, { token: null });
+    assert.equal((await accept()).status, 204);
+    assert.equal((await accept()).status, 400);
+    const login = await create("/api/auth/login", { email, password }, { token: null });
+    assert.equal(login.body.role, "manager");
+    const token = login.body.token;
+    const asManager = { token };
+    const listProperties = () => request("/api/properties", asManager);
+    assert.deepEqual((await listProperties()).body.data.map((property) => property.id), [east.id]);
+    assert.equal((await request(`/api/floors?propertyId=${west.id}`, asManager)).status, 404);
+    assert.equal((await create("/api/floors", { propertyId: west.id, name: "First" }, asManager)).status, 404);
+    assert.equal((await create("/api/floors", { propertyId: east.id, name: "First" }, asManager)).status, 201);
+    assert.equal((await request("/api/managers", asManager)).status, 403);
+
+    const eastTenant = await create("/api/tenants", { name: "East tenant", phone: "9010000041", propertyId: east.id }, asManager);
+    const westTenant = await create("/api/tenants", { name: "West tenant", phone: "9010000042", propertyId: west.id });
+    assert.equal(eastTenant.status, 201);
+    assert.deepEqual((await request("/api/tenants", asManager)).body.data.map((tenant) => tenant.id), [eastTenant.body.id]);
+    assert.equal((await request(`/api/tenants/${westTenant.body.id}`, asManager)).status, 404);
+    const moveIn = new Date(Date.now() - 35 * 86_400_000).toISOString().slice(0, 10);
+    const stay = (tenant, bed, options) => create("/api/stays", {
+        tenantId: tenant.body.id, bedId: bed, moveInDate: moveIn, monthly_rent_paise: 500000,
+    }, options);
+    assert.equal((await stay(eastTenant, west.bed, asManager)).status, 404);
+    const eastStay = await stay(eastTenant, east.bed, asManager);
+    const westStay = await stay(westTenant, west.bed);
+    assert.equal(eastStay.status, 201);
+    assert.equal(westStay.status, 201);
+    const listDues = (record, options) => request(`/api/stays/${record.body.id}/rent-dues`, options);
+    assert.equal((await listDues(westStay, asManager)).status, 404);
+    const { body: { data: [eastDue] } } = await listDues(eastStay, asManager);
+    const { body: { data: [westDue] } } = await listDues(westStay);
+    const pay = (due, key, options) => create("/api/payments", {
+        rentDueId: due.id, amount_paise: 500000, payment_method: "UPI",
+    }, { ...options, headers: { "Idempotency-Key": key } });
+    assert.equal((await pay(westDue, "west-payment-test-01", asManager)).status, 404);
+    assert.equal((await pay(westDue, "west-payment-test-01")).status, 201);
+    assert.equal((await pay(eastDue, "west-payment-test-01", asManager)).status, 409);
+    assert.equal((await pay(eastDue, "east-payment-test-01", asManager)).status, 201);
+
+    const spend = (propertyId, key, options) => create("/api/spends", { propertyId, amount_paise: 200, description: "Cleaning" },
+        { ...options, headers: { "Idempotency-Key": key } });
+    assert.equal((await spend(west.id, "west-expense-test-01")).status, 201);
+    assert.equal((await spend(west.id, "west-expense-test-01", asManager)).status, 404);
+    assert.equal((await spend(east.id, "east-expense-test-01", asManager)).status, 201);
+    assert.deepEqual((await request("/api/spends", asManager)).body.data.map((entry) => entry.property_id), [east.id]);
+
+    const { body: [manager] } = await request("/api/managers");
+    const assign = (propertyIds) => request(`/api/managers/${manager.id}/properties`, { method: "PUT", body: { propertyIds } });
+    assert.equal((await assign([west.id])).status, 200);
+    assert.deepEqual((await listProperties()).body.data.map((property) => property.id), [west.id]);
+    assert.equal((await listDues(eastStay, asManager)).status, 404);
+    assert.equal((await assign([])).status, 200);
+    assert.deepEqual((await listProperties()).body.data, []);
+    assert.equal((await listDues(westStay, asManager)).status, 404);
 });

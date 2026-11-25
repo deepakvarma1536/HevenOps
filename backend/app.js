@@ -1,3 +1,4 @@
+const { managerRoutes } = require("./routes/managerRoutes");
 const express = require("express");
 const cors = require("cors");
 const helmet = require("helmet");
@@ -97,6 +98,7 @@ function createApp(env) {
 
     app.use("/api", authenticate);
     app.use("/api/organizations", organizationRoutes);
+    app.use("/api/managers", managerRoutes);
     app.use("/api/properties", propertyRoutes);
     app.use("/api/floors", floorRoutes);
     app.use("/api/rooms", roomRoutes);

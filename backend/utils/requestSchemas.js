@@ -51,10 +51,10 @@ const schemas = {
         params: z.object({ id }).passthrough(),
         body: z.object({ name: nonEmpty(100) }).strict(),
     }),
-    propertyCreate: request({ body: z.object({ name: nonEmpty(100) }).strict() }),
+    propertyCreate: request({ body: z.object({ name: nonEmpty(100), address: nonEmpty(500).nullable().optional() }).strict() }),
     propertyUpdate: request({
         params: z.object({ id }).passthrough(),
-        body: z.object({ name: nonEmpty(100) }).strict(),
+        body: z.object({ name: nonEmpty(100), address: nonEmpty(500).nullable().optional() }).strict(),
     }),
     floorCreate: request({
         body: z.object({ propertyId: z.coerce.number().int().positive(), name: nonEmpty(50) }).strict(),
@@ -89,6 +89,7 @@ const schemas = {
     }),
     tenantCreate: request({
         body: z.object({
+            propertyId: id.optional(),
             name: nonEmpty(100),
             phone: nonEmpty(20),
             email: email.nullable().optional(),
@@ -161,7 +162,7 @@ const schemas = {
         }).passthrough(),
     }),
     spendCreate: request({
-        body: z.object({ amount_paise: amountPaise, description: nonEmpty(500) }).strict(),
+        body: z.object({ amount_paise: amountPaise, description: nonEmpty(500), propertyId: id.optional() }).strict(),
         headers: z.object({
             "idempotency-key": z.string().regex(/^[A-Za-z0-9._:-]{16,128}$/),
         }).passthrough(),

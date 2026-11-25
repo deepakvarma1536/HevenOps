@@ -1,3 +1,4 @@
+const { ApiError } = require("../utils/apiError");
 const PaymentModel = require("../models/paymentModel");
 const { validateIdParam, validateIdempotencyKey } = require("../utils/validators");
 
@@ -16,6 +17,7 @@ const PaymentController = {
             res.json(payments);
 
         } catch (error) {
+            if (error instanceof ApiError) throw error;
             req.log.error({ errorName: error.name, errorCode: error.code }, "payment list failed");
             res.status(500).json({ error: "Failed to fetch payments" });
         }
@@ -47,6 +49,7 @@ const PaymentController = {
                 res.status(result.wasCreated ? 201 : 200).json(result.payment);
 
             } catch (error) {
+            if (error instanceof ApiError) throw error;
                 if (error.message === "NOT_FOUND") {
                     return res.status(404).json({ error: "Rent due not found" });
                 }
@@ -61,6 +64,7 @@ const PaymentController = {
             }
 
         } catch (error) {
+            if (error instanceof ApiError) throw error;
             req.log.error({ errorName: error.name, errorCode: error.code }, "payment create failed");
             res.status(500).json({ error: "Failed to create payment" });
         }
@@ -81,6 +85,7 @@ const PaymentController = {
             const result = await PaymentModel.reversePayment(id, req.user.organizationId, amount_paise, reason.trim(), idempotencyKey);
             res.status(result.wasCreated ? 201 : 200).json(result.reversal);
         } catch (error) {
+            if (error instanceof ApiError) throw error;
             if (error.message === "NOT_FOUND") return res.status(404).json({ error: "Payment not found" });
             if (error.message.startsWith("OVERREVERSAL:")) {
                 return res.status(400).json({ error: "Reversal exceeds unreversed payment amount", remaining_paise: Number(error.message.split(":")[1]) });

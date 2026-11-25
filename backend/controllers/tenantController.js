@@ -41,7 +41,8 @@ const TenantController = {
                 req.user.organizationId,
                 name.trim(),
                 phone.trim(),
-                email ? email.trim() : null
+                email ? email.trim() : null,
+                req.validated.body.propertyId
             );
 
             res.status(201).json(tenant);

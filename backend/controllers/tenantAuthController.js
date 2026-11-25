@@ -120,7 +120,7 @@ const tenantAuthController = {
         }
     },
 
-    // POST /api/tenants/:id/auth-token (owner/manager only)
+    // POST /api/tenants/:id/auth-token (owner only)
     issueInvite: async (req, res) => {
         try {
             const tenantId = req.params.id;

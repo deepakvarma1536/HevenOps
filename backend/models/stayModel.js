@@ -20,6 +20,12 @@ const StayModel = {
             WHERE s.organization_id = $1
               AND t.archived_at IS NULL AND b.archived_at IS NULL
               AND r.archived_at IS NULL AND f.archived_at IS NULL AND p.archived_at IS NULL`;
+        if (options.managerId) {
+            values.push(options.managerId);
+            fromWhere += ` AND EXISTS (SELECT 1 FROM manager_properties mp
+                WHERE mp.organization_id = s.organization_id AND mp.user_id = $${values.length}
+                  AND mp.property_id = p.id)`;
+        }
         if (options.tenantId) {
             values.push(options.tenantId);
             fromWhere += ` AND s.tenant_id = $${values.length}`;
@@ -37,7 +43,9 @@ const StayModel = {
                 to_char(s.move_out_date, 'YYYY-MM-DD') AS move_out_date,
                 CASE WHEN s.move_out_date IS NULL THEN 'ACTIVE' ELSE 'CHECKED_OUT' END AS status,
                 s.created_at, t.name AS tenant_name, t.phone AS tenant_phone,
-                b.bed_number, r.room_number, f.name AS floor_name, p.name AS property_name`,
+                b.bed_number, (SELECT rp.monthly_rent_paise FROM stay_rate_plans rp WHERE rp.stay_id = s.id AND rp.effective_from <= CURRENT_DATE
+                    AND (rp.effective_to IS NULL OR rp.effective_to >= CURRENT_DATE)
+                    ORDER BY rp.effective_from DESC LIMIT 1) AS monthly_rent_paise, r.room_number, f.name AS floor_name, p.name AS property_name, p.id AS property_id`,
             fromWhere,
             values,
             ...options,
@@ -72,7 +80,7 @@ const StayModel = {
                 b.status AS bed_status,
                 r.room_number,
                 f.name AS floor_name,
-                p.name AS property_name
+                p.name AS property_name, p.id AS property_id
             FROM stays s
             JOIN tenants t ON s.tenant_id = t.id
             JOIN beds b ON s.bed_id = b.id
