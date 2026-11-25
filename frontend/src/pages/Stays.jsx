@@ -1,9 +1,11 @@
 import ApiResourcePage from '../components/ApiResourcePage';
 import { staffApi } from '../api/client';
+import { formatDate, propertyFilter } from '../api/display';
+import StatusBadge from '../components/StatusBadge';
 import { loadStayOptions, loadStays } from '../api/dataApi';
 
-async function loadStayPage() {
-  const [stays, options] = await Promise.all([loadStays(), loadStayOptions()]);
+async function loadStayPage(signal) {
+  const [stays, options] = await Promise.all([loadStays(signal), loadStayOptions(signal)]);
   return { stays, ...options };
 }
 
@@ -13,14 +15,20 @@ export default function Stays() {
       title="Stays"
       description="Assign a tenant to an available bed and track their stay."
       loader={loadStayPage}
+      addLabel="Record New Stay"
+      itemLabel="stays"
+      search={{ label: 'Search tenant name, room or property', values: (stay) => [stay.tenant_name, stay.room_number, stay.property_name] }}
+      filters={[propertyFilter, { key: 'status', label: 'Stay Status', all: 'All Stays' }]}
+      details={{ label: 'Agreement', title: (stay) => `Stay #${stay.id}`, subtitle: (stay) => stay.tenant_name }}
       selectRows={(data) => data.stays}
       columns={[
-        { key: 'tenant_name', label: 'Tenant' },
+        { key: 'id', label: 'Stay ID', render: (stay) => <span className="code-badge">stay-{stay.id}</span> },
+        { key: 'tenant_name', label: 'Tenant', render: (stay) => <strong>{stay.tenant_name}</strong> },
         { key: 'property_name', label: 'Property' },
-        { key: 'room_number', label: 'Room' },
-        { key: 'bed_number', label: 'Bed' },
-        { key: 'move_in_date', label: 'Move-in' },
-        { key: 'status', label: 'Status' },
+        { key: 'room_number', label: 'Room & Bed', render: (stay) => <>{stay.room_number}<small className="resource-secondary">{stay.bed_number}</small></> },
+        { key: 'move_in_date', label: 'Move-in Date', render: (stay) => formatDate(stay.move_in_date) },
+        { key: 'move_out_date', label: 'Move-out Date', render: (stay) => stay.move_out_date ? formatDate(stay.move_out_date) : 'Ongoing' },
+        { key: 'status', label: 'Tenure Status', render: (stay) => <StatusBadge status={stay.status === 'Checked out' ? 'Completed' : stay.status} /> },
       ]}
       fields={[
         {

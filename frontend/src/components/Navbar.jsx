@@ -1,3 +1,5 @@
+import RentNotifications from './RentNotifications';
+
 function Navbar({ activePage, toggleMobileSidebar, onOpenOrgModal, user }) {
   const getPageSubtitle = (page) => {
     switch (page) {
@@ -49,6 +51,7 @@ function Navbar({ activePage, toggleMobileSidebar, onOpenOrgModal, user }) {
       </div>
 
       <div className="navbar-right">
+        {(user?.role === 'owner' || user?.role === 'manager') && <RentNotifications key={activePage} />}
         <div
           className="profile"
           onClick={onOpenOrgModal}

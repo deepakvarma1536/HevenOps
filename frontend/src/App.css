@@ -95,7 +95,7 @@ a {
    SIDEBAR (DEEP FOREST GREEN #173F35 + TERRACOTTA ACCENTS)
    -------------------------------------------------------------------------- */
 .sidebar {
-  width: 250px;
+  width: 218px;
   min-height: 100vh;
   background: #173f35; /* deep forest green */
   color: #f6f3ed;
@@ -111,7 +111,7 @@ a {
 }
 
 .logo {
-  padding: 22px 20px;
+  padding: 19px 16px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
   display: flex;
   align-items: center;
@@ -147,8 +147,9 @@ a {
   font-size: 11px;
   color: #a3b5ae;
   text-transform: uppercase;
-  letter-spacing: 0.8px;
+  letter-spacing: 0.55px;
   font-weight: 500;
+  white-space: nowrap;
 }
 
 .sidebar-nav {
@@ -176,7 +177,7 @@ a {
   align-items: center;
   gap: 12px;
   color: #9eb0a8;
-  padding: 9.5px 14px;
+  padding: 7px 12px;
   border-radius: 8px;
   font-size: 13.5px;
   font-weight: 500;
@@ -268,8 +269,8 @@ a {
    MAIN CONTENT & NAVBAR
    -------------------------------------------------------------------------- */
 .main-content {
-  margin-left: 250px;
-  width: calc(100% - 250px);
+  margin-left: 218px;
+  width: calc(100% - 218px);
   min-height: 100vh;
   display: flex;
   flex-direction: column;
@@ -277,10 +278,10 @@ a {
 }
 
 .navbar {
-  height: 74px;
+  height: 64px;
   background: #ffffff;
   border-bottom: 1px solid var(--border);
-  padding: 0 32px;
+  padding: 0 28px;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -493,7 +494,7 @@ a {
    PAGE CONTENT COMMON LAYOUT
    -------------------------------------------------------------------------- */
 .page-content {
-  padding: 28px 32px;
+  padding: 26px 28px;
   flex: 1;
   animation: pageFadeIn 0.22s ease-out;
 }
@@ -1015,6 +1016,7 @@ a {
   gap: 8px;
 }
 
+label.filter-group,
 .filter-group label {
   font-size: 12.5px;
   color: var(--text-secondary);
@@ -1862,7 +1864,7 @@ a {
   border-radius: 12px;
   border: 1px solid var(--border);
   width: 100%;
-  max-width: 580px;
+  max-width: 520px;
   max-height: 90vh;
   display: flex;
   flex-direction: column;
@@ -2471,5 +2473,145 @@ a {
 
   .auth-card {
     padding: 28px 22px;
+  }
+}
+/* Operations directories */
+.resource-header-actions,
+.inventory-card-heading,
+.resident-cell {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.resource-header-actions {
+  flex-wrap: wrap;
+}
+
+.resource-header-actions a,
+.inventory-card a,
+.dashboard-card a,
+.dashboard-metric,
+.table-actions a {
+  text-decoration: none;
+}
+
+.inventory-card {
+  display: flex;
+  flex-direction: column;
+}
+
+.inventory-card-heading {
+  justify-content: space-between;
+  min-height: 24px;
+  margin-bottom: 14px;
+  color: var(--text-primary);
+}
+
+.property-card .inventory-card-heading svg {
+  order: -1;
+}
+
+.inventory-card h3 {
+  color: #173f35;
+  font-size: 16px;
+  margin-bottom: 8px;
+}
+
+.floor-card h3 {
+  margin-bottom: 16px;
+}
+
+.inventory-card .table-actions {
+  margin-top: auto;
+}
+
+.inventory-card .table-actions > :first-child {
+  flex: 1;
+}
+
+.resource-secondary {
+  display: block;
+  margin-top: 3px;
+  color: var(--text-secondary);
+  font-size: 0.88em;
+}
+
+.resident-cell .profile-avatar {
+  width: 30px;
+  height: 30px;
+  font-size: 11px;
+  flex-shrink: 0;
+}
+
+.finance-stats {
+  margin-bottom: 22px;
+}
+
+.finance-stats .stat-card {
+  min-height: 112px;
+}
+
+.dashboard-dues {
+  display: grid;
+  gap: 9px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.dashboard-dues li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 9px;
+  background: #f8f6f1;
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+
+.assignment-list {
+  display: grid;
+  gap: 12px;
+  border: 1px solid var(--border);
+  padding: 14px;
+  border-radius: 8px;
+}
+
+.assignment-list label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.table-actions > .table-action-btn {
+  white-space: nowrap;
+}
+
+.payment-action {
+  color: #173f35;
+  background: #eaf2ee;
+}
+
+.filter-group .filter-select {
+  max-width: 180px;
+  padding: 4px 9px;
+  font-size: 12.5px;
+}
+
+@media (min-width: 1101px) {
+  .stats-grid.finance-stats {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+.resource-header-actions .primary-btn,
+.modal-footer .primary-btn {
+  width: auto;
+}
+
+@media (max-width: 700px) {
+  .resource-header-actions {
+    width: 100%;
   }
 }

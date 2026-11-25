@@ -15,6 +15,8 @@ import Stays from "./pages/Stays";
 import RentDue from "./pages/RentDue";
 import Payments from "./pages/Payments";
 import Spends from "./pages/Spends";
+import Managers from "./pages/Managers";
+import AcceptManagerInvite from "./pages/AcceptManagerInvite";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
 
@@ -30,6 +32,7 @@ import TenantLayout from "./components/TenantLayout";
 function App() {
   return (
     <Routes>
+      <Route path="/manager-invite" element={<AcceptManagerInvite />} />
       <Route path="/login" element={<Login />} />
       <Route path="/register" element={<Register />} />
       
@@ -47,6 +50,7 @@ function App() {
         <Route path="stays" element={<Stays />} />
         <Route path="rent-dues" element={<RentDue />} />
         <Route path="payments" element={<Payments />} />
+        <Route path="managers" element={<Managers />} />
         <Route path="spends" element={<Spends />} />
       </Route>
 
