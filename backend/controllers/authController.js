@@ -85,8 +85,6 @@ const AuthController = {
                     [organization.id, user.id]
                 );
 
-                await client.query("COMMIT");
-
                 // 7. Generate JWT
                 const token = jwt.sign(
                     {
@@ -96,8 +94,10 @@ const AuthController = {
                         role: "owner"
                     },
                     process.env.JWT_SECRET,
-                    { expiresIn: process.env.JWT_EXPIRES_IN }
+                    { expiresIn: req.app.locals.jwtExpiresIn }
                 );
+
+                await client.query("COMMIT");
 
                 res.status(201).json({
                     user: {
@@ -175,7 +175,7 @@ const AuthController = {
                     role: membership.role
                 },
                 process.env.JWT_SECRET,
-                { expiresIn: process.env.JWT_EXPIRES_IN }
+                { expiresIn: req.app.locals.jwtExpiresIn }
             );
 
             res.json({

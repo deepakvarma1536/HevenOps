@@ -13,6 +13,7 @@ const { safeErrorMetadata } = require("./utils/safeErrorMetadata");
 
 function createApp(env) {
     const app = express();
+    app.locals.jwtExpiresIn = env.JWT_EXPIRES_IN;
     const allowedOrigins = env.CORS_ORIGIN.split(",").map((origin) => origin.trim());
     const authRateLimit = createAuthRateLimit(env.AUTH_RATE_LIMIT_WINDOW_MS, env.AUTH_RATE_LIMIT_MAX);
 

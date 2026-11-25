@@ -64,6 +64,7 @@ before(async () => {
         LOG_LEVEL: "silent",
         AUTH_RATE_LIMIT_MAX: "1000",
     }));
+    delete process.env.JWT_EXPIRES_IN;
     server = app.listen(0);
     await new Promise((resolve, reject) => {
         server.once("listening", resolve);
@@ -93,6 +94,10 @@ test("owner registration and login create and authenticate a tenant organization
     assert.equal(login.status, 200);
     assert.equal(login.body.organizationId, organizationId);
     assert.equal(login.body.role, "owner");
+    for (const token of [ownerToken, login.body.token]) {
+        const claims = jwt.verify(token, jwtSecret);
+        assert.equal(claims.exp - claims.iat, 900);
+    }
 
     const profile = await request("/api/auth/me", { token: login.body.token });
     assert.equal(profile.status, 200);
