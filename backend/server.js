@@ -2,6 +2,8 @@ require("dotenv").config();
 
 const { loadEnv } = require("./config/env");
 const { logger } = require("./middleware/requestLogger");
+const { safeErrorMetadata } = require("./utils/safeErrorMetadata");
+const { captureException } = require("./utils/errorTracker");
 
 async function start() {
     const env = loadEnv();
@@ -44,7 +46,8 @@ async function start() {
     return server;
 }
 
-start().catch((error) => {
-    logger.fatal({ errorName: error.name }, error.message);
+start().catch(async (error) => {
+    logger.fatal(safeErrorMetadata(error), "API startup failed");
+    await captureException(error);
     process.exitCode = 1;
 });

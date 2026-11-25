@@ -4,6 +4,7 @@ const { loadEnv } = require("../config/env");
 const { listQuerySchema, paginateQuery } = require("../utils/pagination");
 const { schemas } = require("../utils/requestSchemas");
 const { isValidIsoDate, validateIdParam, validateIdempotencyKey } = require("../utils/validators");
+const { migrationConnectionOptions } = require("../utils/migrationConnection");
 
 test("ISO date and idempotency-key validators reject malformed values", () => {
     assert.equal(isValidIsoDate("2024-02-29"), true);
@@ -126,5 +127,26 @@ test("environment validation rejects missing secrets and unsafe production defau
         DATABASE_URL: "postgres://localhost/hevenops_test",
         JWT_SECRET: "a".repeat(32),
     });
-    assert.equal(valid.CORS_ORIGIN, "http://localhost:5173");
+
+    test("migration connection configuration requires an explicit URL or complete DB settings", () => {
+        assert.deepEqual(migrationConnectionOptions({
+            MIGRATION_DATABASE_URL: "postgresql://migration.example/db",
+            DATABASE_URL: "postgresql://runtime.example/db",
+        }), { connectionString: "postgresql://migration.example/db" });
+        assert.deepEqual(migrationConnectionOptions({
+            DB_HOST: "db",
+            DB_PORT: "5432",
+            DB_DATABASE: "hevenops",
+            DB_USER: "app",
+            DB_PASSWORD: "example-only",
+        }), {
+            host: "db",
+            port: 5432,
+            database: "hevenops",
+            user: "app",
+            password: "example-only",
+        });
+        assert.throws(() => migrationConnectionOptions({}), /refusing an implicit database connection/);
+    });
+    assert.deepEqual(valid.CORS_ORIGIN.split(","), ["http://localhost:5173", "http://127.0.0.1:5173"]);
 });

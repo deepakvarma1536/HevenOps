@@ -4,14 +4,11 @@ const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 const { Client } = require('pg');
+const { migrationConnectionOptions } = require('../utils/migrationConnection');
 
 const command = process.argv[2] || 'up';
 const migrationsDir = path.join(__dirname, '..', 'migrations');
-const databaseUrl = process.env.DATABASE_URL;
-
-if (!databaseUrl) {
-    throw new Error('DATABASE_URL is required for migrations; refusing to use an implicit database connection.');
-}
+const connectionOptions = migrationConnectionOptions();
 if (!['up', 'status', 'baseline'].includes(command)) {
     throw new Error('Usage: node scripts/migrate.js <up|status|baseline VERSION>');
 }
@@ -28,7 +25,10 @@ const migrations = fs.readdirSync(migrationsDir)
 const checksum = (sql) => crypto.createHash('sha256').update(sql).digest('hex');
 
 async function main() {
-    const client = new Client({ connectionString: databaseUrl, ssl: process.env.DB_SSL === 'true' ? { rejectUnauthorized: true } : undefined });
+    const client = new Client({
+        ...connectionOptions,
+        ssl: process.env.DB_SSL === 'true' ? { rejectUnauthorized: true } : undefined
+    });
     await client.connect();
     try {
         await client.query(`CREATE TABLE IF NOT EXISTS schema_migrations (

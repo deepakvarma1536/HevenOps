@@ -34,9 +34,11 @@ after(async () => {
     await new Promise((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
 });
 
-test("liveness distinguishes process health without requiring the database", async () => {
-    const response = await fetch(`${baseUrl}/health`);
+test("liveness allows the local Vite origin without requiring the database", async () => {
+    const origin = "http://127.0.0.1:5173";
+    const response = await fetch(`${baseUrl}/health`, { headers: { Origin: origin } });
     assert.equal(response.status, 200);
+    assert.equal(response.headers.get("access-control-allow-origin"), origin);
     assert.equal((await response.json()).status, "ok");
     assert.ok(response.headers.get("x-request-id"));
 });
@@ -47,6 +49,40 @@ test("readiness returns the standard error format when the database is unavailab
     assert.equal(response.status, 503);
     assert.equal(payload.error.code, "DATABASE_NOT_READY");
     assert.ok(payload.error.requestId);
+});
+
+test("login and signup report PostgreSQL authentication failures as service unavailability", async (t) => {
+    const pool = require("../config/db");
+    const databaseError = Object.assign(new Error("role does not exist"), { code: "28000" });
+    t.mock.method(pool, "query", async () => { throw databaseError; });
+
+    const credentials = { email: "owner@example.test", password: "test-password-123" };
+    for (const [path, body] of [
+        ["login", credentials],
+        ["register", { ...credentials, name: "Test Owner", organizationName: "Test Org" }],
+    ]) {
+        const response = await fetch(`${baseUrl}/api/auth/${path}`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(body),
+        });
+        const payload = await response.json();
+        assert.equal(response.status, 503);
+        assert.equal(payload.error.code, "DATABASE_NOT_READY");
+        assert.equal(payload.error.requestId, response.headers.get("x-request-id"));
+        assert.doesNotMatch(payload.error.message, /role does not exist/);
+    }
+});
+
+test("worker readiness and metrics fail visibly when the database is unavailable", async () => {
+    const readiness = await fetch(`${baseUrl}/ready/jobs`);
+    const readinessPayload = await readiness.json();
+    assert.equal(readiness.status, 503);
+    assert.equal(readinessPayload.error.code, "WORKER_NOT_READY");
+
+    const metrics = await fetch(`${baseUrl}/metrics`);
+    assert.equal(metrics.status, 503);
+    assert.match(await metrics.text(), /metrics temporarily unavailable/);
 });
 
 test("schema validation uses the standard API error format", async () => {
@@ -171,4 +207,13 @@ test("environment validation rejects wildcard and non-origin CORS values", () =>
         DATABASE_URL: "https://example.com/not-postgres",
         JWT_SECRET: process.env.JWT_SECRET,
     }), /DATABASE_URL/);
+});
+
+test("an empty optional error-tracking webhook is treated as unset", () => {
+    const config = loadEnv({
+        DATABASE_URL: process.env.DATABASE_URL,
+        JWT_SECRET: process.env.JWT_SECRET,
+        ERROR_TRACKING_WEBHOOK_URL: "",
+    });
+    assert.equal(config.ERROR_TRACKING_WEBHOOK_URL, undefined);
 });

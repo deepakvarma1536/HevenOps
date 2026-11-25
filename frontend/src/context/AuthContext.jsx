@@ -33,9 +33,9 @@ export function AuthProvider({ children }) {
   const login = useCallback(async (email, password) => {
     try {
       const response = await staffApi.post('/auth/login', { email: email.trim(), password }, { skipAuth: true });
-      const { token, user } = response.data;
+      const { token, user, role, organizationId } = response.data;
       if (!token || !user) throw new Error('The sign-in response was incomplete.');
-      staffSession.update({ token, principal: user, loading: false, error: null });
+      staffSession.update({ token, principal: { ...user, role, organizationId }, loading: false, error: null });
       navigate('/');
       return { success: true };
     } catch (error) {
@@ -51,9 +51,9 @@ export function AuthProvider({ children }) {
         password,
         organizationName: organizationName.trim(),
       }, { skipAuth: true });
-      const { token, user } = response.data;
+      const { token, user, role, organization } = response.data;
       if (!token || !user) throw new Error('The registration response was incomplete.');
-      staffSession.update({ token, principal: user, loading: false, error: null });
+      staffSession.update({ token, principal: { ...user, role, organizationId: organization?.id }, loading: false, error: null });
       navigate('/');
       return { success: true };
     } catch (error) {

@@ -2,16 +2,21 @@
 
 ## Run locally
 
-1. Copy `.env.example` to `.env` and configure `DATABASE_URL` and a random `JWT_SECRET` with at least 32 characters. The migration runner requires an explicit `DATABASE_URL`.
+1. Create a PostgreSQL database and a login role with permission to migrate and use it. Copy `.env.example` to `.env`, point `DATABASE_URL` at that role and database, and set a random `JWT_SECRET` with at least 32 characters.
 2. Configure `CORS_ORIGIN` with the exact frontend origin(s), comma-separated if needed.
 3. Run the database migrations, then start the API:
 
 ```sh
 npm run migrate
-npm start
+npm run dev
 ```
 
+`npm run dev` restarts the API when backend files change. Use `npm start` to run
+the API without watch mode.
+
 `DATABASE_URL` takes precedence over the individual `DB_*` connection values. The pool is limited by `DB_POOL_MAX`, `DB_CONNECTION_TIMEOUT_MS`, and `DB_IDLE_TIMEOUT_MS`. Production requires `DB_SSL=true` and an explicit CORS allow-list.
+
+Check `GET /ready` to confirm the API can connect to PostgreSQL. If signup or login returns `DATABASE_NOT_READY` and the API logs PostgreSQL error `28000`, verify that the configured role exists on the PostgreSQL instance in `DATABASE_URL`. Restart the API after editing `.env`.
 
 ## Operations
 

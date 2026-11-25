@@ -1,3 +1,6 @@
+const { captureException } = require("./errorTracker");
+const { safeErrorMetadata } = require("./safeErrorMetadata");
+
 class ApiError extends Error {
     constructor(status, code, message, details) {
         super(message);
@@ -45,7 +48,8 @@ function errorHandler(error, req, res, next) {
                 : "An unexpected error occurred";
 
     if (status >= 500) {
-        req.log?.error({ requestId: req.id, errorName: error.name, errorCode: error.code }, "request failed");
+        req.log?.error({ requestId: req.id, ...safeErrorMetadata(error) }, "request failed");
+        void captureException(error, { requestId: req.id });
     }
     return sendApiError(req, res, status, code, message, isApiError ? error.details : undefined);
 }

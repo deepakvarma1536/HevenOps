@@ -17,7 +17,7 @@ const pool = new Pool({
     connectionTimeoutMillis: Number(process.env.DB_CONNECTION_TIMEOUT_MS || 5000),
     idleTimeoutMillis: Number(process.env.DB_IDLE_TIMEOUT_MS || 10000),
     ssl: process.env.DB_SSL === "true" ? { rejectUnauthorized: true } : false,
-    application_name: "hevenops-api",
+    application_name: `hevenops-${process.env.HEVENOPS_PROCESS_ROLE || "api"}`,
 });
 
 module.exports = pool;

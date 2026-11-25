@@ -2,8 +2,24 @@ const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
 const UserModel = require("../models/userModel");
 const pool = require("../config/db");
+const { sendApiError } = require("../utils/apiError");
+const { safeErrorMetadata } = require("../utils/safeErrorMetadata");
 
 const SALT_ROUNDS = 10;
+const DATABASE_UNAVAILABLE_CODES = new Set([
+    "3D000", "57P01", "57P02", "57P03", "53300",
+    "ECONNREFUSED", "ECONNRESET", "ETIMEDOUT", "ENOTFOUND", "EAI_AGAIN",
+]);
+
+function sendAuthFailure(req, res, error, message) {
+    const metadata = safeErrorMetadata(error);
+    req.log.error(metadata, message);
+    const code = metadata.errorCode;
+    if (code?.startsWith("08") || code?.startsWith("28") || DATABASE_UNAVAILABLE_CODES.has(code)) {
+        return sendApiError(req, res, 503, "DATABASE_NOT_READY", "Authentication is temporarily unavailable. Please try again later.");
+    }
+    return res.status(500).json({ error: message });
+}
 
 const AuthController = {
     async register(req, res) {
@@ -93,6 +109,7 @@ const AuthController = {
                         id: organization.id,
                         name: organization.name
                     },
+                    role: "owner",
                     token
                 });
 
@@ -104,8 +121,7 @@ const AuthController = {
             }
 
         } catch (error) {
-            req.log.error({ errorName: error.name, errorCode: error.code }, "registration failed");
-            res.status(500).json({ error: "Registration failed" });
+            return sendAuthFailure(req, res, error, "Registration failed");
         }
     },
 
@@ -174,8 +190,7 @@ const AuthController = {
             });
 
         } catch (error) {
-            req.log.error({ errorName: error.name, errorCode: error.code }, "login failed");
-            res.status(500).json({ error: "Login failed" });
+            return sendAuthFailure(req, res, error, "Login failed");
         }
     },
 
