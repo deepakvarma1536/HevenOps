@@ -15,14 +15,14 @@ const PropertyController = {
 
     async create(req, res) {
         try {
-            const { name } = req.body;
+            const { name, address } = req.validated.body;
             if (!name || !name.trim()) {
                 return res.status(400).json({ error: "name is required" });
             }
 
             const property = await PropertyModel.create(
                 req.user.organizationId,
-                name.trim()
+                name.trim(), address
             );
 
             res.status(201).json(property);
@@ -37,13 +37,13 @@ const PropertyController = {
             const { id } = req.params;
             if (!validateIdParam(id, res, "id")) return;
 
-            const { name } = req.body;
+            const { name, address } = req.validated.body;
             if (!name || !name.trim()) {
                 return res.status(400).json({ error: "name is required" });
             }
 
             const updated = await PropertyModel.update(
-                id, req.user.organizationId, name.trim()
+                id, req.user.organizationId, name.trim(), address
             );
 
             if (!updated) {

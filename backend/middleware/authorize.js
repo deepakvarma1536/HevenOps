@@ -1,6 +1,6 @@
 const ROLE_PERMISSIONS = {
     owner: ["*"],
-    manager: ["operations:read", "operations:write", "tenant:auth", "finance:read", "finance:write"],
+    manager: ["operations:read", "operations:write", "finance:read", "finance:write"],
     staff: ["operations:read", "operations:write"]
 };
 

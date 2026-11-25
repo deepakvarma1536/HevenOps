@@ -107,7 +107,7 @@ const RentDueModel = {
      * @param {string} dueDate - Due date for payment (YYYY-MM-DD)
      * @returns {{ created: Array, skipped: number }} result summary
      */
-    async generateForMonth(organizationId, dueMonth, dueDate) {
+    async generateForMonth(organizationId, dueMonth, dueDate, managerId = null) {
         const client = await pool.connect();
         try {
             await client.query("BEGIN");
@@ -121,8 +121,15 @@ const RentDueModel = {
                  WHERE s.organization_id = $1
                    AND s.move_out_date IS NULL
                    AND s.move_in_date <= $2
+                   AND ($3::bigint IS NULL OR EXISTS (
+                       SELECT 1 FROM beds b JOIN rooms r ON r.id = b.room_id
+                       JOIN floors f ON f.id = r.floor_id JOIN properties p ON p.id = f.property_id
+                       JOIN manager_properties mp ON mp.property_id = p.id
+                       WHERE b.id = s.bed_id AND mp.organization_id = s.organization_id
+                         AND mp.user_id = $3 AND p.archived_at IS NULL
+                   ))
                  ORDER BY s.id FOR NO KEY UPDATE OF s`,
-                [organizationId, dueMonth]
+                [organizationId, dueMonth, managerId]
             );
 
             const created = [];

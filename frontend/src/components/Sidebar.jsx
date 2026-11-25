@@ -12,7 +12,7 @@ import {
   SpendsIcon,
 } from "./Icons";
 
-function Sidebar({ mobileOpen, closeMobileSidebar, onOpenOrgModal, canManageSpends }) {
+function Sidebar({ mobileOpen, closeMobileSidebar, onOpenOrgModal, canManageSpends, user, organizationName }) {
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -27,6 +27,7 @@ function Sidebar({ mobileOpen, closeMobileSidebar, onOpenOrgModal, canManageSpen
     if (path.startsWith("/stays")) return "Stays";
     if (path.startsWith("/rent-dues")) return "Rent Due";
     if (path.startsWith("/payments")) return "Payments";
+    if (path.startsWith("/managers")) return "Managers";
     if (path.startsWith("/spends")) return "Spends";
     return "Dashboard";
   };
@@ -107,6 +108,7 @@ function Sidebar({ mobileOpen, closeMobileSidebar, onOpenOrgModal, canManageSpen
             <div role="group" aria-labelledby="nav-section-people">
               {menuItem("Tenants", TenantsIcon, "/tenants")}
               {menuItem("Stays", StaysIcon, "/stays")}
+              {user?.role === "owner" && menuItem("Managers", TenantsIcon, "/managers")}
             </div>
           </div>
 
@@ -129,10 +131,10 @@ function Sidebar({ mobileOpen, closeMobileSidebar, onOpenOrgModal, canManageSpen
           title="Click to view Organization details"
           aria-label="View Organization and Administrator details"
         >
-          <div className="user-avatar" aria-hidden="true">A</div>
+          <div className="user-avatar" aria-hidden="true">{user?.name?.[0]?.toUpperCase() || "U"}</div>
           <div className="user-details">
-            <strong>Admin</strong>
-            <small>HevenOps Living ⚙</small>
+            <strong>{user?.name || 'User'}</strong>
+            <small>{organizationName || 'Organization details'}</small>
           </div>
         </div>
       </aside>

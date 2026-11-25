@@ -152,7 +152,8 @@ const RentDueController = {
             const result = await RentDueModel.generateForMonth(
                 req.user.organizationId,
                 dueMonth,
-                dueDate
+                dueDate,
+                req.user.role === "manager" ? req.user.userId : null
             );
 
             res.status(201).json({

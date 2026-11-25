@@ -1,4 +1,6 @@
 import { useState } from 'react';
+import Modal from './Modal';
+import { PlusIcon, SearchIcon } from './Icons';
 import AsyncState from './AsyncState';
 import useAsyncResource from '../hooks/useAsyncResource';
 
@@ -15,15 +17,84 @@ export default function ApiResourcePage({
   rowAction,
   validate,
   requiresIdempotencyKey = false,
+  addLabel,
+  initialValues,
+  onFormComplete,
+  search,
+  filters = [],
+  initialFilters = {},
+  summary,
+  cardView,
+  cardGrid = 'property-grid',
+  defaultView = 'table',
+  actions,
+  details,
+  headerAction,
+  itemLabel = title.toLowerCase(),
 }) {
   const { data, loading, error, retry } = useAsyncResource(loader);
-  const [formValues, setFormValues] = useState({});
+  const [formValues, setFormValues] = useState(initialValues || {});
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState(null);
   const [actionError, setActionError] = useState(null);
   const [validationError, setValidationError] = useState('');
   const [idempotencyKey, setIdempotencyKey] = useState(null);
-  const rows = data ? selectRows(data) : [];
+  const [isAdding, setIsAdding] = useState(Boolean(initialValues));
+  const [searchTerm, setSearchTerm] = useState('');
+  const [filterValues, setFilterValues] = useState(initialFilters);
+  const [view, setView] = useState(defaultView);
+  const [selected, setSelected] = useState(null);
+  const allRows = data ? selectRows(data) : [];
+  const rows = allRows.filter((row) => {
+    const text = search?.values(row).filter((value) => value != null).join(' ').toLowerCase();
+    return (!search || text.includes(searchTerm.trim().toLowerCase())) &&
+      filters.every((filter) => !filterValues[filter.key] || String(row[filter.key]) === filterValues[filter.key]);
+  });
+
+  function openForm() {
+    setFormError(null);
+    setValidationError('');
+    setIsAdding(true);
+  }
+
+  function closeForm() {
+    if (saving) return;
+    setIsAdding(false);
+    onFormComplete?.();
+  }
+
+  const actionCell = (row) => {
+    const action = rowAction?.when(row) ? rowAction : null;
+    const deleteAvailable = deleteRecord && !action;
+    return (
+      <div className="table-actions">
+        {actions?.(row)}
+        {details && <button type="button" className="table-action-btn" onClick={() => setSelected(row)}>{details.label}</button>}
+        {(action || deleteAvailable) && (
+          <button
+            type="button"
+            className={deleteWarning ? 'table-action-btn text-danger' : 'table-action-btn'}
+            onClick={async () => {
+              const prompt = deleteAvailable && deleteWarning
+                ? deleteWarning(row)
+                : `${action?.label || 'Archive'} this ${title.toLowerCase().replace(/s$/, '')} record?`;
+              if (!window.confirm(prompt)) return;
+              setActionError(null);
+              try {
+                if (action) await action.run(row);
+                else await deleteRecord(row);
+                await retry();
+              } catch (requestError) {
+                setActionError(requestError);
+              }
+            }}
+          >
+            {action?.label || (deleteWarning ? 'Delete' : 'Archive')}
+          </button>
+        )}
+      </div>
+    );
+  };
 
   const submit = async (event) => {
     event.preventDefault();
@@ -57,7 +128,9 @@ export default function ApiResourcePage({
       await createRecord(formValues, data, requestKey);
       setFormValues({});
       setIdempotencyKey(null);
-      await retry();
+      setIsAdding(false);
+      if (onFormComplete) onFormComplete();
+      else await retry();
     } catch (requestError) {
       setFormError(requestError);
     } finally {
@@ -65,18 +138,9 @@ export default function ApiResourcePage({
     }
   };
 
-  return (
-    <section className="page-content">
-      <div className="page-header">
-        <div>
-          <h2>{title}</h2>
-          <p>{description}</p>
-        </div>
-      </div>
-
-      {createRecord && (
-        <form className="card auth-form api-resource-form" onSubmit={submit} aria-label={`Add ${title.toLowerCase()} record`}>
-          <h3>Add {title.replace(/s$/, '')}</h3>
+  const form = createRecord && (
+        <form className={addLabel ? "modal-form" : "card auth-form api-resource-form"} id="resource-form" onSubmit={submit} aria-label={`Add ${title.toLowerCase()} record`}>
+          {!addLabel && <h3>Add {title.replace(/s$/, '')}</h3>}
           {fields.map((field) => {
             const options = typeof field.options === 'function' ? field.options(data) : field.options;
             const inputProps = {
@@ -124,17 +188,90 @@ export default function ApiResourcePage({
               {formError.status === 401 ? 'Your session has expired. Sign in again to continue.' : formError.message}
             </div>
           )}
-          <button type="submit" className="primary-btn" disabled={saving || loading}>
+          {!addLabel && <button type="submit" className="primary-btn" disabled={saving || loading}>
             {saving ? 'Saving...' : 'Save'}
-          </button>
+          </button>}
         </form>
+  );
+
+  return (
+    <section className="page-content">
+      <div className="page-header">
+        <div>
+          <h2>{title}</h2>
+          <p>{description}</p>
+        </div>
+        <div className="resource-header-actions">
+          {headerAction}
+          {cardView && defaultView === 'table' && (
+            <div className="view-toggle" aria-label="Layout">
+              {['table', 'cards'].map((layout) => (
+                <button type="button" key={layout} className={`toggle-btn ${view === layout ? 'active' : ''}`}
+                  aria-pressed={view === layout} onClick={() => setView(layout)}>
+                  {layout === 'table' ? 'Table' : 'Cards'}
+                </button>
+              ))}
+            </div>
+          )}
+          {addLabel && createRecord && (
+            <button type="button" className="primary-btn cta-btn" onClick={openForm}>
+              <PlusIcon size={16} />{addLabel}
+            </button>
+          )}
+        </div>
+      </div>
+
+      {!addLabel && form}
+      {addLabel && createRecord && (
+        <Modal isOpen={isAdding} onClose={closeForm} title={addLabel} footer={
+          <div className="modal-actions-space-between">
+            <button type="button" className="outline-btn" onClick={closeForm} disabled={saving}>Cancel</button>
+            <button type="submit" form="resource-form" className="primary-btn" disabled={saving || loading}>
+              {saving ? 'Saving…' : 'Save'}
+            </button>
+          </div>
+        }>
+          {form}
+        </Modal>
       )}
 
       <AsyncState loading={loading} error={error} onRetry={retry}>
+        {data && summary?.(data, allRows)}
+        {(search || filters.length > 0) && (
+          <>
+            <div className="filter-bar">
+              {search && (
+                <div className="search-input-wrapper">
+                  <span className="search-icon" aria-hidden="true"><SearchIcon size={16} /></span>
+                  <input className="search-input" type="search" aria-label={search.label} placeholder={search.label}
+                    value={searchTerm} onChange={(event) => setSearchTerm(event.target.value)} />
+                </div>
+              )}
+              {filters.map((filter) => (
+                <label className="filter-group" key={filter.key}>
+                  {filter.label}
+                  <select className="filter-select" value={filterValues[filter.key] || ''}
+                    onChange={(event) => setFilterValues({ ...filterValues, [filter.key]: event.target.value })}>
+                    <option value="">{filter.all || 'All'}</option>
+                    {((data ? filter.options?.(data, allRows) : undefined) ?? [...new Set(allRows.map((row) => row[filter.key]).filter(Boolean))]).map((option) => (
+                      <option key={option.value ?? option} value={option.value ?? option}>{option.label ?? option}</option>
+                    ))}
+                  </select>
+                </label>
+              ))}
+            </div>
+            <p className="content-meta-bar">Showing {rows.length} of {allRows.length} {itemLabel}</p>
+          </>
+        )}
+
         {rows.length === 0 ? (
           <div className="card empty-state" role="status">
-            <h3>No {title.toLowerCase()} yet</h3>
-            <p>Records will appear here after they are added.</p>
+            <h3>{allRows.length ? 'No matching records' : `No ${title.toLowerCase()} yet`}</h3>
+            <p>{allRows.length ? 'Try a different search or filter.' : 'Records will appear here after they are added.'}</p>
+          </div>
+        ) : view === 'cards' && cardView ? (
+          <div className={cardGrid}>
+            {rows.map((row) => cardView(row, data, actionCell(row)))}
           </div>
         ) : (
           <div className="table-card table-responsive">
@@ -142,7 +279,7 @@ export default function ApiResourcePage({
               <thead>
                 <tr>
                   {columns.map((column) => <th key={column.key} scope="col">{column.label}</th>)}
-                  {(deleteRecord || rowAction) && <th scope="col">Actions</th>}
+                  {(deleteRecord || rowAction || actions || details) && <th scope="col">{details?.heading || 'Actions'}</th>}
                 </tr>
               </thead>
               <tbody>
@@ -151,39 +288,30 @@ export default function ApiResourcePage({
                     {columns.map((column) => (
                       <td key={column.key}>{column.render ? column.render(row) : row[column.key] ?? '—'}</td>
                     ))}
-                    {(deleteRecord || (rowAction && rowAction.when(row))) && (
-                      <td>
-                        <button
-                          type="button"
-                          className={deleteWarning ? 'outline-btn text-danger' : 'outline-btn'}
-                          onClick={async () => {
-                            const action = rowAction && rowAction.when(row) ? rowAction : null;
-                            const prompt = !action && deleteWarning
-                              ? deleteWarning(row)
-                              : `${action?.label || 'Archive'} this ${title.toLowerCase().replace(/s$/, '')} record?`;
-                            if (!window.confirm(prompt)) return;
-                            setActionError(null);
-                            try {
-                              if (action) await action.run(row);
-                              else await deleteRecord(row);
-                              await retry();
-                            } catch (requestError) {
-                              setActionError(requestError);
-                            }
-                          }}
-                        >
-                          {rowAction && rowAction.when(row) ? rowAction.label : deleteWarning ? 'Delete' : 'Archive'}
-                        </button>
-                      </td>
-                    )}
+                    {(deleteRecord || rowAction || actions || details) && <td>{actionCell(row)}</td>}
                   </tr>
                 ))}
               </tbody>
             </table>
-            {actionError && <div className="auth-error" role="alert">{actionError.message}</div>}
           </div>
         )}
+        {actionError && <div className="auth-error" role="alert">{actionError.message}</div>}
       </AsyncState>
+      {selected && (
+        <Modal isOpen onClose={() => setSelected(null)} title={details.title(selected)} subtitle={details.subtitle?.(selected)}
+          footer={<button type="button" className="primary-btn" onClick={() => setSelected(null)}>Close</button>}>
+          {details.render ? details.render(selected) : (
+            <dl className="detail-info-list">
+              {columns.map((column) => (
+                <div key={column.key} className="detail-info-item">
+                  <dt className="info-label">{column.label}</dt>
+                  <dd className="info-val">{column.render ? column.render(selected) : selected[column.key] ?? '—'}</dd>
+                </div>
+              ))}
+            </dl>
+          )}
+        </Modal>
+      )}
     </section>
   );
 }

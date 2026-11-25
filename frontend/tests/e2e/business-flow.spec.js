@@ -60,33 +60,38 @@ test('register, login, manage a stay, generate and pay rent, and activate an inv
   expect(staffToken).toBeTruthy();
 
   await page.goto('/properties');
-  await page.getByLabel('Property name').fill(propertyName);
+  await page.getByRole('button', { name: 'Add Property' }).click();
+  await page.getByRole('dialog').getByLabel('Property name', { exact: true }).fill(propertyName);
   await page.getByRole('button', { name: 'Save' }).click();
-  await expect(page.getByRole('cell', { name: propertyName })).toBeVisible();
+  await expect(page.getByRole('heading', { name: propertyName, exact: true })).toBeVisible();
 
   await page.goto('/floors');
-  await page.getByLabel('Property', { exact: true }).selectOption({ label: propertyName });
-  await page.getByLabel('Floor name').fill('Ground');
+  await page.getByRole('button', { name: 'Add Floor' }).click();
+  await page.getByRole('dialog').getByLabel('Property', { exact: true }).selectOption({ label: propertyName });
+  await page.getByRole('dialog').getByLabel('Floor name', { exact: true }).fill('Ground');
   await page.getByRole('button', { name: 'Save' }).click();
-  await expect(page.getByRole('cell', { name: 'Ground' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Ground', exact: true })).toBeVisible();
 
   await page.goto('/rooms');
-  await page.getByLabel('Floor', { exact: true }).selectOption({ label: `${propertyName} — Ground` });
-  await page.getByLabel('Room number').fill('G-01');
-  await page.getByLabel('Room type').fill('Single');
+  await page.getByRole('button', { name: 'Add Room' }).click();
+  await page.getByRole('dialog').getByLabel('Floor', { exact: true }).selectOption({ label: `${propertyName} — Ground` });
+  await page.getByRole('dialog').getByLabel('Room number', { exact: true }).fill('G-01');
+  await page.getByRole('dialog').getByLabel('Room type', { exact: true }).fill('Single');
   await page.getByRole('button', { name: 'Save' }).click();
   await expect(page.getByRole('cell', { name: 'G-01' })).toBeVisible();
 
   await page.goto('/beds');
-  await page.getByLabel('Room', { exact: true }).selectOption({ label: `${propertyName} — Ground — G-01` });
-  await page.getByLabel('Bed number').fill('B-01');
+  await page.getByRole('button', { name: 'Add Bed' }).click();
+  await page.getByRole('dialog').getByLabel('Room', { exact: true }).selectOption({ label: `${propertyName} — Ground — G-01` });
+  await page.getByRole('dialog').getByLabel('Bed number', { exact: true }).fill('B-01');
   await page.getByRole('button', { name: 'Save' }).click();
   await expect(page.getByRole('cell', { name: 'B-01' })).toBeVisible();
 
   await page.goto('/tenants');
-  await page.getByLabel('Full name').fill(tenantName);
-  await page.getByLabel('Phone').fill(tenantPhone);
-  await page.getByLabel('Email').fill(tenantEmail);
+  await page.getByRole('button', { name: 'Add Tenant' }).click();
+  await page.getByRole('dialog').getByLabel('Full name', { exact: true }).fill(tenantName);
+  await page.getByRole('dialog').getByLabel('Phone', { exact: true }).fill(tenantPhone);
+  await page.getByRole('dialog').getByLabel('Email', { exact: true }).fill(tenantEmail);
   await page.getByRole('button', { name: 'Save' }).click();
   await expect(page.getByRole('cell', { name: tenantName })).toBeVisible();
 
@@ -108,12 +113,13 @@ test('register, login, manage a stay, generate and pay rent, and activate an inv
   expect(setupResponse.ok(), await setupResponse.text()).toBeTruthy();
 
   await page.goto('/stays');
-  await page.getByLabel('Tenant', { exact: true }).selectOption({ label: tenantName });
-  await page.getByLabel('Available bed').selectOption({ label: `${propertyName} — G-01 — B-01` });
+  await page.getByRole('button', { name: 'Record New Stay' }).click();
+  await page.getByRole('dialog').getByLabel('Tenant', { exact: true }).selectOption({ label: tenantName });
+  await page.getByRole('dialog').getByLabel('Available bed', { exact: true }).selectOption({ label: `${propertyName} — G-01 — B-01` });
   const moveIn = new Date();
   moveIn.setUTCDate(moveIn.getUTCDate() - 35);
-  await page.getByLabel('Move-in date').fill(moveIn.toISOString().slice(0, 10));
-  await page.getByLabel('Monthly rent (₹)').fill('1250');
+  await page.getByRole('dialog').getByLabel('Move-in date', { exact: true }).fill(moveIn.toISOString().slice(0, 10));
+  await page.getByRole('dialog').getByLabel('Monthly rent (₹)', { exact: true }).fill('1250');
   await page.getByRole('button', { name: 'Save' }).click();
   await expect(page.getByRole('cell', { name: tenantName })).toBeVisible();
 
@@ -134,13 +140,16 @@ test('register, login, manage a stay, generate and pay rent, and activate an inv
   await page.getByRole('row', { name: new RegExp(tenantName) }).getByRole('button', { name: 'Check out' }).click();
   await expect(page.getByRole('alert')).toHaveText('Record the outstanding rent payment before checking out.');
 
-  await page.goto('/payments');
+  await page.goto('/rent-dues');
+  await page.getByRole('row').filter({ hasText: tenantName }).getByRole('link', { name: 'Mark Paid' }).click();
+  await expect(page.getByRole('dialog', { name: 'Record Payment' })).toBeVisible();
+  await expect(page.getByRole('dialog').getByLabel('Payment amount (₹)', { exact: true })).toHaveValue('1250');
   const rentMonth = new Intl.DateTimeFormat('en-IN', { month: 'long', year: 'numeric', timeZone: 'UTC' })
     .format(new Date(dues[0].due_month));
   const dueOption = `${tenantName} — ${rentMonth} · Cycle 1 — ₹1,250 remaining`;
-  await page.getByLabel('Outstanding rent due').selectOption({ label: dueOption });
-  await page.getByLabel('Payment amount (₹)').fill('250');
-  await page.getByLabel('Payment method').selectOption('UPI');
+  await page.getByRole('dialog').getByLabel('Outstanding rent due', { exact: true }).selectOption({ label: dueOption });
+  await page.getByRole('dialog').getByLabel('Payment amount (₹)', { exact: true }).fill('250');
+  await page.getByRole('dialog').getByLabel('Payment method', { exact: true }).selectOption('UPI');
   const withoutReference = page.waitForResponse((response) =>
     response.url().endsWith('/api/payments') && response.request().method() === 'POST');
   await page.getByRole('button', { name: 'Save' }).click();
@@ -148,14 +157,17 @@ test('register, login, manage a stay, generate and pay rent, and activate an inv
   expect(payment.status()).toBe(201);
   expect((await payment.json()).reference).toBeNull();
 
+  await page.getByRole('button', { name: 'Record Payment', exact: true }).click();
   const remainingOption = `${tenantName} — ${rentMonth} · Cycle 1 — ₹1,000 remaining`;
-  await page.getByLabel('Outstanding rent due').selectOption({ label: remainingOption });
-  await page.getByLabel('Payment amount (₹)').fill('1000');
-  await page.getByLabel('Payment method').selectOption('UPI');
-  await page.getByLabel('Reference (optional)').fill(`receipt-${unique}`);
+  await page.getByRole('dialog').getByLabel('Outstanding rent due', { exact: true }).selectOption({ label: remainingOption });
+  await page.getByRole('dialog').getByLabel('Payment amount (₹)', { exact: true }).fill('1000');
+  await page.getByRole('dialog').getByLabel('Payment method', { exact: true }).selectOption('UPI');
+  await page.getByRole('dialog').getByLabel('Reference (optional)', { exact: true }).fill(`receipt-${unique}`);
   await page.getByRole('button', { name: 'Save' }).click();
   const paymentRow = page.getByRole('row').filter({ hasText: `receipt-${unique}` });
-  await expect(paymentRow.getByRole('cell', { name: tenantName })).toBeVisible();
+  await expect(paymentRow.getByText(tenantName, { exact: true })).toBeVisible();
+  await paymentRow.getByRole('button', { name: 'Receipt' }).click();
+  await expect(page.getByRole('dialog', { name: /Payment receipt/ })).toContainText(`receipt-${unique}`);
 
   await page.goto('/tenant/login');
   await page.getByLabel('Email or Phone').fill(tenantEmail);
@@ -217,4 +229,51 @@ test('protects organization data and keeps staff and tenant sessions separate', 
   await expect(page).toHaveURL('/login');
   await page.goto('/tenant');
   await expect(page).toHaveURL('/tenant/login');
+});
+
+test('owner invites and assigns a property manager who sees only their property', async ({ page, request }) => {
+  const owner = await registerOrganization(request, 'manager-flow');
+  const managerEmail = `manager-user-${unique}@example.test`;
+  for (const name of ['Assigned House', 'Private House']) {
+    const property = await request.post(`${apiUrl}/properties`, { headers: authHeaders(owner.token), data: { name } });
+    expect(property.status(), await property.text()).toBe(201);
+  }
+
+  await page.goto('/login');
+  await page.getByLabel('Email Address').fill(owner.email);
+  await page.getByLabel('Password').fill(password);
+  await page.getByRole('button', { name: 'Sign In' }).click();
+  await page.getByRole('button', { name: 'Navigate to Managers' }).click();
+  await page.getByRole('button', { name: 'Invite Manager' }).click();
+  const invite = page.getByRole('dialog', { name: 'Invite Property Manager' });
+  await invite.getByLabel('Full name').fill('Branch Manager');
+  await invite.getByLabel('Email').fill(managerEmail);
+  await invite.getByLabel('Property').selectOption({ label: 'Assigned House' });
+  await invite.getByRole('button', { name: 'Create Invite Link' }).click();
+  const url = await invite.getByLabel('Invitation link').inputValue();
+
+  const managerPage = await page.context().newPage();
+  await managerPage.goto(url);
+  await managerPage.getByLabel('Choose a password').fill(password);
+  await managerPage.getByRole('button', { name: 'Accept Invitation' }).click();
+  await managerPage.getByRole('link', { name: 'Sign in' }).click();
+  await managerPage.getByLabel('Email Address').fill(managerEmail);
+  await managerPage.getByLabel('Password').fill(password);
+  await managerPage.getByRole('button', { name: 'Sign In' }).click();
+  await managerPage.getByRole('button', { name: 'Navigate to Properties' }).click();
+  await expect(managerPage.getByRole('heading', { name: 'Assigned House' })).toBeVisible();
+  await expect(managerPage.getByRole('heading', { name: 'Private House' })).toHaveCount(0);
+  await expect(managerPage.getByRole('button', { name: 'Add Property' })).toHaveCount(0);
+
+  await page.goto('/managers');
+  await page.getByRole('button', { name: 'Edit Assignments' }).click();
+  const assignment = page.getByRole('dialog', { name: /Assign Properties/ });
+  await assignment.getByLabel('Assigned House').uncheck();
+  await assignment.getByLabel('Private House').check();
+  await assignment.getByRole('button', { name: 'Save Assignments' }).click();
+  await expect(page.getByRole('row').filter({ hasText: managerEmail })).toContainText('Private House');
+  await managerPage.reload();
+  await expect(managerPage.getByRole('heading', { name: 'Private House' })).toBeVisible();
+  await expect(managerPage.getByRole('heading', { name: 'Assigned House' })).toHaveCount(0);
+  await managerPage.close();
 });

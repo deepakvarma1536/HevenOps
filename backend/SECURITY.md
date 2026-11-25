@@ -5,9 +5,14 @@ organization ID from the verified JWT, never from client input.
 
 | Role | Access |
 | --- | --- |
-| `owner` | All actions, including organization settings and destructive deletes. |
-| `manager` | Read/write operations (properties, inventory, tenants and stays), issue tenant invites/resets, and manage finance (dues, payments, deposits). |
+| `owner` | All properties and actions, including manager assignments, tenant portal credentials, organization settings, and destructive deletes. |
+| `manager` | Read/write operations and finance (dues, payments, deposits, expenses) for assigned properties. Removing all property assignments revokes data access. Organization-wide expenses are owner-only. |
 | `staff` | Read/write operations only. Cannot perform financial actions, change organization settings, or delete records. |
+
+Owners create a manager invitation for an existing property. The one-time link
+expires after 24 hours and must be shared with the invited manager. Accepting
+it creates a separate sign-in. Managers can be assigned additional properties
+in the manager directory.
 
 Tenant invite and password-reset tokens are random 256-bit values. Only their SHA-256
 hash is stored, each token expires after `TENANT_AUTH_TOKEN_TTL_HOURS` (24 by default),

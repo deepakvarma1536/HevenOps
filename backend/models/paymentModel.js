@@ -1,3 +1,4 @@
+const { ApiError } = require("../utils/apiError");
 const pool = require("../config/db");
 const { paginateQuery } = require("../utils/pagination");
 const { netPaidFor, rentDueStatus } = require("./rentDueBalance");
@@ -12,6 +13,10 @@ const updateRentDueStatus = async (client, rentDueId) => {
         [rentDueId]
     );
 };
+
+function idempotencyConflict() {
+    return new ApiError(409, "IDEMPOTENCY_CONFLICT", "This request key was already used for another record");
+}
 
 const PaymentModel = {
     async getByRentDue(rentDueId, organizationId, options = {}) {
@@ -41,7 +46,11 @@ const PaymentModel = {
                  JOIN stays s ON s.id = rd.stay_id WHERE p.idempotency_key = $1 AND s.organization_id = $2`,
                 [idempotencyKey, organizationId]
             );
-            if (existing.rows.length) { await client.query("COMMIT"); return { payment: existing.rows[0], wasCreated: false }; }
+            if (existing.rows.length) {
+                if (String(existing.rows[0].rent_due_id) !== String(rentDueId)) throw idempotencyConflict();
+                await client.query("COMMIT");
+                return { payment: existing.rows[0], wasCreated: false };
+            }
             const due = await client.query(
                 `SELECT rd.id, rd.amount_paise FROM rent_dues rd JOIN stays s ON s.id = rd.stay_id
                  WHERE rd.id = $1 AND s.organization_id = $2 FOR UPDATE OF rd`, [rentDueId, organizationId]
@@ -62,7 +71,10 @@ const PaymentModel = {
             await client.query("ROLLBACK");
             if (error.code === "23505") {
                 const duplicate = await pool.query("SELECT * FROM payments WHERE idempotency_key = $1", [idempotencyKey]);
-                if (duplicate.rows.length) return { payment: duplicate.rows[0], wasCreated: false };
+                if (duplicate.rows.length) {
+                    if (String(duplicate.rows[0].rent_due_id) !== String(rentDueId)) throw idempotencyConflict();
+                    return { payment: duplicate.rows[0], wasCreated: false };
+                }
             }
             throw error;
         } finally { client.release(); }
@@ -73,7 +85,11 @@ const PaymentModel = {
         try {
             await client.query("BEGIN");
             const existing = await client.query("SELECT * FROM payment_reversals WHERE idempotency_key = $1", [idempotencyKey]);
-            if (existing.rows.length) { await client.query("COMMIT"); return { reversal: existing.rows[0], wasCreated: false }; }
+            if (existing.rows.length) {
+                if (String(existing.rows[0].payment_id) !== String(paymentId)) throw idempotencyConflict();
+                await client.query("COMMIT");
+                return { reversal: existing.rows[0], wasCreated: false };
+            }
             const payment = await client.query(
                 `SELECT p.id, p.rent_due_id, p.amount_paise
                  FROM payments p JOIN rent_dues rd ON rd.id = p.rent_due_id JOIN stays s ON s.id = rd.stay_id

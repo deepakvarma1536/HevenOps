@@ -1,3 +1,4 @@
+const { ApiError } = require("../utils/apiError");
 const DepositModel = require("../models/depositModel");
 const { validateIdParam, isValidIsoDate, validateIdempotencyKey } = require("../utils/validators");
 
@@ -21,6 +22,7 @@ const DepositController = {
             res.json(deposits);
 
         } catch (error) {
+            if (error instanceof ApiError) throw error;
             req.log.error({ errorName: error.name, errorCode: error.code }, "deposit list failed");
             res.status(500).json({ error: "Failed to fetch deposit transactions" });
         }
@@ -43,6 +45,7 @@ const DepositController = {
             res.json(balance);
 
         } catch (error) {
+            if (error instanceof ApiError) throw error;
             req.log.error({ errorName: error.name, errorCode: error.code }, "deposit balance fetch failed");
             res.status(500).json({ error: "Failed to fetch deposit balance" });
         }
@@ -109,6 +112,7 @@ const DepositController = {
             res.status(result.wasCreated ? 201 : 200).json(result.deposit);
 
         } catch (error) {
+            if (error instanceof ApiError) throw error;
             if (error.message === "STAY_NOT_FOUND") {
                 return res.status(404).json({ error: "Stay not found in your organization" });
             }
