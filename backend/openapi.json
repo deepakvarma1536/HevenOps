@@ -267,6 +267,36 @@
     "/deposits/balance": {
       "get": { "summary": "Get deposit balance for stay", "security": [{ "BearerAuth": [] }], "parameters": [{ "in": "query", "name": "stayId", "required": true, "schema": { "type": "integer" } }], "responses": { "200": { "description": "Balance totals" } } }
     },
+    "/spends": {
+      "get": {
+        "summary": "List spends for the authenticated organization",
+        "security": [{ "BearerAuth": [] }],
+        "responses": { "200": { "description": "Paginated spends" }, "403": { "$ref": "#/components/responses/ApiError" } }
+      },
+      "post": {
+        "summary": "Record a spend",
+        "security": [{ "BearerAuth": [], "IdempotencyKey": [] }],
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": {
+            "type": "object",
+            "required": ["amount_paise", "description"],
+            "properties": {
+              "amount_paise": { "type": "integer", "minimum": 1, "maximum": 9007199254740991 },
+              "description": { "type": "string", "minLength": 1, "maxLength": 500 }
+            },
+            "additionalProperties": false
+          } } }
+        },
+        "responses": {
+          "200": { "description": "Original spend returned on retry" },
+          "201": { "description": "Spend recorded" },
+          "400": { "$ref": "#/components/responses/ApiError" },
+          "403": { "$ref": "#/components/responses/ApiError" },
+          "409": { "$ref": "#/components/responses/ApiError" }
+        }
+      }
+    },
     "/tenant-portal/me": {
       "get": { "summary": "Get tenant profile", "security": [{ "BearerAuth": [] }], "responses": { "200": { "description": "Tenant profile" } } },
       "put": { "summary": "Update safe profile fields", "security": [{ "BearerAuth": [] }], "requestBody": { "$ref": "#/components/requestBodies/TenantProfile" }, "responses": { "200": { "description": "Updated profile" } } }

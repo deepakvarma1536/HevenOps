@@ -11,6 +11,7 @@ function Layout() {
   const location = useLocation();
   const navigate = useNavigate();
   const { user, logout } = useAuth();
+  const canManageSpends = user?.role === "owner" || user?.role === "manager";
 
   // Map path to active page name for UI
   const getActivePageName = () => {
@@ -24,6 +25,7 @@ function Layout() {
     if (path.startsWith("/stays")) return "Stays";
     if (path.startsWith("/rent-dues")) return "Rent Due";
     if (path.startsWith("/payments")) return "Payments";
+    if (path.startsWith("/spends")) return "Spends";
     return "Dashboard";
   };
 
@@ -60,6 +62,7 @@ function Layout() {
       <Sidebar
         activePage={activePage}
         setActivePage={handleNavigate}
+        canManageSpends={canManageSpends}
         mobileOpen={mobileSidebarOpen}
         closeMobileSidebar={closeMobileSidebar}
         onOpenOrgModal={() => setIsOrgModalOpen(true)}
@@ -72,7 +75,7 @@ function Layout() {
           onOpenOrgModal={() => setIsOrgModalOpen(true)}
           user={user}
         />
-        <Outlet />
+        <Outlet context={{ canManageSpends }} />
       </main>
 
       {/* Organization / Admin Profile Modal */}

@@ -9,9 +9,10 @@ import {
   StaysIcon,
   RentDueIcon,
   PaymentsIcon,
+  SpendsIcon,
 } from "./Icons";
 
-function Sidebar({ mobileOpen, closeMobileSidebar, onOpenOrgModal }) {
+function Sidebar({ mobileOpen, closeMobileSidebar, onOpenOrgModal, canManageSpends }) {
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -26,6 +27,7 @@ function Sidebar({ mobileOpen, closeMobileSidebar, onOpenOrgModal }) {
     if (path.startsWith("/stays")) return "Stays";
     if (path.startsWith("/rent-dues")) return "Rent Due";
     if (path.startsWith("/payments")) return "Payments";
+    if (path.startsWith("/spends")) return "Spends";
     return "Dashboard";
   };
 
@@ -113,6 +115,7 @@ function Sidebar({ mobileOpen, closeMobileSidebar, onOpenOrgModal }) {
             <div role="group" aria-labelledby="nav-section-finance">
               {menuItem("Rent Due", RentDueIcon, "/rent-dues")}
               {menuItem("Payments", PaymentsIcon, "/payments")}
+              {canManageSpends && menuItem("Spends", SpendsIcon, "/spends")}
             </div>
           </div>
         </nav>

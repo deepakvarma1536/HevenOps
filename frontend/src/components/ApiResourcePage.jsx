@@ -77,43 +77,40 @@ export default function ApiResourcePage({
           <h3>Add {title.replace(/s$/, '')}</h3>
           {fields.map((field) => {
             const options = typeof field.options === 'function' ? field.options(data) : field.options;
+            const inputProps = {
+              id: `${title.toLowerCase().replaceAll(' ', '-')}-${field.name}`,
+              name: field.name,
+              className: 'form-input',
+              required: field.required !== false,
+              value: formValues[field.name] || '',
+              onChange(event) {
+                const { value } = event.target;
+                setIdempotencyKey(null);
+                setFormValues((current) => ({ ...current, [field.name]: value }));
+              },
+            };
             return (
               <div className="form-group" key={field.name}>
-                <label htmlFor={`${title.toLowerCase().replaceAll(' ', '-')}-${field.name}`}>{field.label}</label>
+                <label htmlFor={inputProps.id}>{field.label}</label>
                 {field.type === 'select' ? (
-                  <select
-                    id={`${title.toLowerCase().replaceAll(' ', '-')}-${field.name}`}
-                    name={field.name}
-                    className="form-input"
-                    required={field.required !== false}
-                    value={formValues[field.name] || ''}
-                    onChange={(event) => {
-                      setIdempotencyKey(null);
-                      setFormValues((current) => ({ ...current, [field.name]: event.target.value }));
-                    }}
-                  >
+                  <select {...inputProps}>
                     <option value="">Select {field.label.toLowerCase()}</option>
                     {(options || []).map((option) => (
                       <option key={option.value} value={option.value}>{option.label}</option>
                     ))}
                   </select>
+                ) : field.type === 'textarea' ? (
+                  <textarea {...inputProps} maxLength={field.maxLength} rows={3} />
                 ) : (
                   <input
-                    id={`${title.toLowerCase().replaceAll(' ', '-')}-${field.name}`}
-                    name={field.name}
+                    {...inputProps}
                     type={field.type || 'text'}
-                    className="form-input"
-                    required={field.required !== false}
+                    inputMode={field.inputMode}
                     min={typeof field.min === 'function' ? field.min(data, formValues) : field.min}
                     max={typeof field.max === 'function' ? field.max(data, formValues) : field.max}
                     minLength={field.minLength}
                     maxLength={field.maxLength}
                     step={field.step}
-                    value={formValues[field.name] || ''}
-                    onChange={(event) => {
-                      setIdempotencyKey(null);
-                      setFormValues((current) => ({ ...current, [field.name]: event.target.value }));
-                    }}
                   />
                 )}
               </div>

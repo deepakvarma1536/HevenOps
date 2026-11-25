@@ -105,6 +105,40 @@ test("owner registration and login create and authenticate a tenant organization
     assert.equal(organizations.body.data[0].name, "Organization One");
 });
 
+test("spends are scoped to the organization and concurrent retries record money once", { skip: shouldSkip }, async () => {
+    const method = "POST";
+    const headers = { "Idempotency-Key": "spend-test-key-0001" };
+    const body = { amount_paise: 125025, description: "  Plumbing repair  " };
+    const submit = (options = {}) => request("/api/spends", { method, headers, body, ...options });
+
+    assert.equal((await submit({ token: null })).status, 401);
+    assert.equal((await submit({ body: { ...body, description: " " } })).status, 400);
+    assert.equal((await submit({ body: { ...body, amount_paise: 1.25 } })).status, 400);
+    assert.equal((await submit({ headers: {} })).status, 400);
+    const staffToken = jwt.sign({ organizationId, role: "staff" }, jwtSecret);
+    assert.equal((await submit({ token: staffToken })).status, 403);
+    assert.equal((await request("/api/spends", { token: staffToken })).status, 403);
+
+    const attempts = await Promise.all([submit(), submit()]);
+    assert.deepEqual(attempts.map(({ status }) => status).sort(), [200, 201]);
+    assert.deepEqual(attempts[0].body, attempts[1].body);
+    const spend = attempts[0].body;
+    assert.equal(spend.description, "Plumbing repair");
+    assert.equal(Number(spend.amount_paise), 125025);
+    assert.equal((await submit({ body: { ...body, amount_paise: 100 } })).status, 409);
+
+    const second = await register("spend-owner@example.test", "Other Spend Organization");
+    const otherList = await request("/api/spends", { token: second.token });
+    assert.equal(otherList.status, 200);
+    assert.deepEqual(otherList.body.data, []);
+    assert.equal((await submit({ token: second.token })).status, 201);
+
+    const ownerList = await request("/api/spends");
+    assert.equal(ownerList.status, 200);
+    assert.deepEqual(ownerList.body.data, [spend]);
+    assert.equal(ownerList.body.pagination.total, 1);
+});
+
 test("tenant setup invitation provisions a usable tenant portal account", { skip: shouldSkip }, async () => {
     const created = await request("/api/tenants", {
         method: "POST",

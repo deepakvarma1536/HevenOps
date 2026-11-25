@@ -105,6 +105,15 @@ export function PaymentsIcon({ size = 18, className = "" }) {
   );
 }
 
+export function SpendsIcon({ size = 18, className = "" }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+      <path d="M5 21V3l3 2 4-2 4 2 3-2v18l-3-2-4 2-4-2-3 2Z" />
+      <path d="M9 12h6" />
+    </svg>
+  );
+}
+
 export function BellIcon({ size = 18, className = "" }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>

@@ -85,6 +85,7 @@ function createApp(env) {
     const rentDueRoutes = require("./routes/rentDueRoutes");
     const paymentRoutes = require("./routes/paymentRoutes");
     const depositRoutes = require("./routes/depositRoutes");
+    const spendRoutes = require("./routes/spendRoutes");
     const tenantAuthRoutes = require("./routes/tenantAuthRoutes");
     const tenantPortalRoutes = require("./routes/tenantPortalRoutes");
     const authenticate = require("./middleware/authenticate");
@@ -104,6 +105,7 @@ function createApp(env) {
     app.use("/api/rent-dues", rentDueRoutes);
     app.use("/api/payments", paymentRoutes);
     app.use("/api/deposits", depositRoutes);
+    app.use("/api/spends", spendRoutes);
 
     app.use(notFoundHandler);
     app.use(errorHandler);

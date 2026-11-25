@@ -14,6 +14,7 @@ import Tenants from "./pages/Tenants";
 import Stays from "./pages/Stays";
 import RentDue from "./pages/RentDue";
 import Payments from "./pages/Payments";
+import Spends from "./pages/Spends";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
 
@@ -46,6 +47,7 @@ function App() {
         <Route path="stays" element={<Stays />} />
         <Route path="rent-dues" element={<RentDue />} />
         <Route path="payments" element={<Payments />} />
+        <Route path="spends" element={<Spends />} />
       </Route>
 
       {/* Tenant Routes */}

@@ -160,6 +160,12 @@ const schemas = {
             "idempotency-key": z.string().regex(/^[A-Za-z0-9._:-]{16,128}$/),
         }).passthrough(),
     }),
+    spendCreate: request({
+        body: z.object({ amount_paise: amountPaise, description: nonEmpty(500) }).strict(),
+        headers: z.object({
+            "idempotency-key": z.string().regex(/^[A-Za-z0-9._:-]{16,128}$/),
+        }).passthrough(),
+    }),
     tenantInvite: request({
         params: z.object({ id }).passthrough(),
         body: z.object({ purpose: z.enum(["INVITE", "PASSWORD_RESET"]).optional() }).strict(),
@@ -229,6 +235,7 @@ const schemas = {
             requiredFilters: ["stayId"],
         }),
     }),
+    spendList: request({ query: listQuerySchema({ sortFields: ["id"] }) }),
     tenantPortalDueList: request({
         query: listQuerySchema({
             sortFields: ["id", "due_date", "due_month", "amount_paise", "status"],

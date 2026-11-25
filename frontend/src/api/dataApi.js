@@ -133,3 +133,7 @@ export async function loadPayments(signal) {
   }));
   return { stays, dues, payments: rows.flat() };
 }
+
+export function loadSpends(signal) {
+  return getAll('/spends', { sortOrder: 'desc' }, signal);
+}
