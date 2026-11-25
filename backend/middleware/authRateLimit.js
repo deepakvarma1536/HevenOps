@@ -5,6 +5,7 @@ function createAuthRateLimit(windowMs, limit) {
     return rateLimit({
         windowMs,
         limit,
+        skip: (req) => req.method !== "POST",
         standardHeaders: "draft-8",
         legacyHeaders: false,
         handler(req, res) {

@@ -74,6 +74,24 @@ test("login and signup report PostgreSQL authentication failures as service unav
     }
 });
 
+test("session reads do not consume the authentication attempt limit", async (t) => {
+    const limitedServer = createApp({ ...env, AUTH_RATE_LIMIT_MAX: 1 }).listen(0);
+    t.after(() => new Promise((resolve) => limitedServer.close(resolve)));
+    await new Promise((resolve) => limitedServer.once("listening", resolve));
+    const authUrl = `http://127.0.0.1:${limitedServer.address().port}/api/auth`;
+
+    for (let request = 0; request < 2; request++) {
+        const response = await fetch(`${authUrl}/me`);
+        assert.equal(response.status, 401);
+    }
+
+    const attempt = { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" };
+    assert.equal((await fetch(`${authUrl}/login`, attempt)).status, 400);
+    const blocked = await fetch(`${authUrl}/login`, attempt);
+    assert.equal(blocked.status, 429);
+    assert.equal((await blocked.json()).error.code, "RATE_LIMITED");
+});
+
 test("worker readiness and metrics fail visibly when the database is unavailable", async () => {
     const readiness = await fetch(`${baseUrl}/ready/jobs`);
     const readinessPayload = await readiness.json();
