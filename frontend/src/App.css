@@ -2431,6 +2431,42 @@ label.filter-group,
   font-size: 14px;
 }
 
+.password-input-wrapper {
+  position: relative;
+  width: 100%;
+}
+
+.auth-form .password-input {
+  padding-right: 46px;
+}
+
+.password-visibility-toggle {
+  position: absolute;
+  top: 50%;
+  right: 9px;
+  display: inline-flex;
+  width: 32px;
+  height: 32px;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  transform: translateY(-50%);
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.password-visibility-toggle:hover {
+  color: var(--primary);
+}
+
+.password-visibility-toggle:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
 .auth-submit-btn {
   justify-content: center;
   width: 100%;

@@ -19,7 +19,14 @@ describe('staff login form', () => {
     render(<MemoryRouter><Login /></MemoryRouter>);
 
     await user.type(screen.getByLabelText('Email Address'), 'owner@example.test');
-    await user.type(screen.getByLabelText('Password'), 'invalid-password');
+    const password = screen.getByLabelText('Password');
+    await user.type(password, 'invalid-password');
+    expect(password).toHaveAttribute('type', 'password');
+    await user.click(screen.getByRole('button', { name: 'Show password' }));
+    expect(password).toHaveAttribute('type', 'text');
+    expect(password).toHaveValue('invalid-password');
+    await user.click(screen.getByRole('button', { name: 'Hide password' }));
+    expect(password).toHaveAttribute('type', 'password');
     await user.click(screen.getByRole('button', { name: 'Sign In' }));
 
     expect(login).toHaveBeenCalledWith('owner@example.test', 'invalid-password');
