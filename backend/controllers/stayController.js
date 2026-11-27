@@ -177,6 +177,12 @@ const StayController = {
         }
     },
 
+    async setPlannedMoveOut(req, res) {
+        const { params, body } = req.validated;
+        const notice = await StayModel.setPlannedMoveOut(params.id, req.user.organizationId, body.plannedMoveOutDate);
+        res.json(notice);
+    },
+
     async setRatePlan(req, res) {
         try {
             const { id } = req.params;

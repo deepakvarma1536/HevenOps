@@ -7,6 +7,8 @@ function Navbar({ activePage, toggleMobileSidebar, onOpenOrgModal, user }) {
         return "Welcome back to HevenOps — Overview & live performance metrics";
       case "Properties":
         return "Manage your PG properties, buildings and facility capacities";
+      case "Apartments":
+        return "Manage apartments and their rooms within each floor";
       case "Floors":
         return "Inspect property floors, room distribution and bed occupancy";
       case "Rooms":

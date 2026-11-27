@@ -883,6 +883,12 @@ a {
   margin-bottom: 20px;
 }
 
+@media (min-width: 1201px) {
+  .mini-stats-grid.bed-stats {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+}
+
 .mini-stat-card {
   background: white;
   border: 1px solid var(--border);

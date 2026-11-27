@@ -29,7 +29,8 @@ before(async () => {
             organization_id BIGINT NOT NULL REFERENCES organizations(id),
             bed_id BIGINT,
             move_in_date DATE NOT NULL DEFAULT CURRENT_DATE,
-            move_out_date DATE
+            move_out_date DATE,
+            planned_move_out_date DATE
         );
         CREATE TABLE beds (
             id BIGINT PRIMARY KEY,

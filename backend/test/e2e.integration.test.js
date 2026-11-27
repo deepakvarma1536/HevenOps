@@ -335,7 +335,9 @@ test("tenant assignment, rent generation, payment, and portal reads are scoped t
 
     const { rows: [billingDates] } = await pool.query(
         `SELECT to_char(CURRENT_DATE - 35, 'YYYY-MM-DD') AS move_in,
-                to_char(CURRENT_DATE - 5, 'YYYY-MM-DD') AS due_date`
+                to_char(CURRENT_DATE - 5, 'YYYY-MM-DD') AS due_date,
+                to_char(CURRENT_DATE + 2, 'YYYY-MM-DD') AS planned,
+                to_char(CURRENT_DATE - 1, 'YYYY-MM-DD') AS yesterday`
     );
     const stay = await request("/api/stays", {
         method: "POST",
@@ -350,6 +352,16 @@ test("tenant assignment, rent generation, payment, and portal reads are scoped t
     stayId = stay.body.id;
     assert.equal(stay.body.tenant_id, tenantId);
     assert.equal(stay.body.bed_status, "OCCUPIED");
+
+    const setNotice = (plannedMoveOutDate) => request(`/api/stays/${stayId}/planned-move-out`, {
+        method: "PATCH", body: { plannedMoveOutDate },
+    });
+    assert.equal((await setNotice(billingDates.yesterday)).status, 400);
+    const notice = await setNotice(billingDates.planned);
+    assert.equal(notice.status, 200, JSON.stringify(notice.body));
+    assert.equal(notice.body.planned_move_out_date, billingDates.planned);
+    const { body: { data: stays } } = await request("/api/stays");
+    assert.equal(stays.find((row) => row.id === stayId).days_until_planned_move_out, 2);
 
     const automatic = await request(`/api/stays/${stayId}/rent-dues`);
     assert.equal(automatic.status, 200, JSON.stringify(automatic.body));
@@ -379,6 +391,14 @@ test("tenant assignment, rent generation, payment, and portal reads are scoped t
     const currentStay = await request(`/api/stays/${stayId}`);
     assert.equal(currentStay.body.move_out_date, null);
     assert.equal(currentStay.body.bed_status, "OCCUPIED");
+    assert.equal(currentStay.body.planned_move_out_date, billingDates.planned);
+
+    // Simulate the notice date passing while the resident is still checked in.
+    await pool.query("UPDATE stays SET planned_move_out_date = CURRENT_DATE - 1 WHERE id = $1", [stayId]);
+    const elapsedNotice = await request(`/api/stays/${stayId}`);
+    assert.equal(elapsedNotice.body.days_until_planned_move_out, -1);
+    assert.equal(elapsedNotice.body.bed_status, "OCCUPIED");
+    assert.equal((await setNotice(null)).body.planned_move_out_date, null);
 
     await pool.query("UPDATE rent_dues SET due_date = CURRENT_DATE - 1, status = 'DUE' WHERE id = $1", [rentDueId]);
     const staffOverdue = await request(`/api/stays/${stayId}/rent-dues?status=OVERDUE`);
@@ -642,6 +662,12 @@ test("an invited manager can operate and record finances only in assigned proper
     const westStay = await stay(westTenant, west.bed);
     assert.equal(eastStay.status, 201);
     assert.equal(westStay.status, 201);
+    const { rows: [{ planned }] } = await pool.query("SELECT to_char(CURRENT_DATE + 2, 'YYYY-MM-DD') AS planned");
+    const planMoveOut = (record) => request(`/api/stays/${record.body.id}/planned-move-out`, {
+        ...asManager, method: "PATCH", body: { plannedMoveOutDate: planned },
+    });
+    assert.equal((await planMoveOut(westStay)).status, 404);
+    assert.equal((await planMoveOut(eastStay)).status, 200);
     const listDues = (record, options) => request(`/api/stays/${record.body.id}/rent-dues`, options);
     assert.equal((await listDues(westStay, asManager)).status, 404);
     const { body: { data: [eastDue] } } = await listDues(eastStay, asManager);
@@ -653,6 +679,15 @@ test("an invited manager can operate and record finances only in assigned proper
     assert.equal((await pay(westDue, "west-payment-test-01")).status, 201);
     assert.equal((await pay(eastDue, "west-payment-test-01", asManager)).status, 409);
     assert.equal((await pay(eastDue, "east-payment-test-01", asManager)).status, 201);
+    const checkout = await request(`/api/stays/${eastStay.body.id}/checkout`, {
+        ...asManager, method: "PATCH", body: {},
+    });
+    assert.equal(checkout.status, 200, JSON.stringify(checkout.body));
+    const checkedOut = await request(`/api/stays/${eastStay.body.id}`, asManager);
+    assert.ok(checkedOut.body.move_out_date);
+    assert.equal(checkedOut.body.planned_move_out_date, null);
+    assert.equal(checkedOut.body.bed_status, "VACANT");
+    assert.equal((await planMoveOut(eastStay)).status, 404);
 
     const spend = (propertyId, key, options) => create("/api/spends", { propertyId, amount_paise: 200, description: "Cleaning" },
         { ...options, headers: { "Idempotency-Key": key } });
@@ -669,4 +704,41 @@ test("an invited manager can operate and record finances only in assigned proper
     assert.equal((await assign([])).status, 200);
     assert.deepEqual((await listProperties()).body.data, []);
     assert.equal((await listDues(westStay, asManager)).status, 404);
+});
+
+test("apartments group rooms on one floor without changing bed or stay assignments", { skip: shouldSkip }, async () => {
+    const create = async (path, body, expected = 201) => {
+        const response = await request(path, { method: "POST", body });
+        assert.equal(response.status, expected, JSON.stringify(response.body));
+        return response.body;
+    };
+    const property = await create("/api/properties", { name: "Apartment PG" });
+    const floor = await create("/api/floors", { propertyId: property.id, name: "First" });
+    const upstairs = await create("/api/floors", { propertyId: property.id, name: "Second" });
+    const first = await create("/api/apartments", { floorId: floor.id, name: "Flat A" });
+    const second = await create("/api/apartments", { floorId: floor.id, name: "Flat B" });
+    await create("/api/apartments", { floorId: floor.id, name: "flat a" }, 409);
+    await create("/api/apartments", { floorId: upstairs.id, name: "Flat A" });
+    await create("/api/rooms", { floorId: upstairs.id, apartmentId: first.id, room_number: "Wrong floor" }, 400);
+    const direct = await create("/api/rooms", { floorId: floor.id, room_number: "Direct" });
+    const nested = await create("/api/rooms", { floorId: floor.id, apartmentId: second.id, room_number: "B1" });
+    await create("/api/rooms", { floorId: floor.id, apartmentId: first.id, room_number: "B1" }, 409);
+    assert.equal(direct.apartment_id, null);
+    const bed = await create("/api/beds", { roomId: direct.id, bed_number: "Apartment Test Bed" });
+    const tenant = await create("/api/tenants", { name: "Apartment Resident", phone: "9010000171" });
+    const stay = await create("/api/stays", {
+        tenantId: tenant.id, bedId: bed.id, moveInDate: new Date().toISOString().slice(0, 10), monthly_rent_paise: 500000,
+    });
+    const move = await request(`/api/rooms/${direct.id}`, { method: "PATCH", body: { room_number: "Direct", apartmentId: first.id } });
+    assert.equal(move.status, 200, JSON.stringify(move.body));
+    const filtered = await request(`/api/rooms?floorId=${floor.id}&apartmentId=${first.id}`);
+    assert.deepEqual(filtered.body.data.map((room) => [room.id, room.apartment_name]), [[direct.id, "Flat A"]]);
+    const updatedStay = await request(`/api/stays/${stay.id}`);
+    assert.equal(updatedStay.body.bed_id, bed.id);
+    assert.equal(updatedStay.body.apartment_name, "Flat A");
+    assert.equal((await request(`/api/apartments/${first.id}`, { method: "DELETE" })).status, 409);
+    const spareBed = await create("/api/beds", { roomId: nested.id, bed_number: "Apartment Spare" });
+    assert.equal((await request(`/api/apartments/${second.id}`, { method: "DELETE" })).status, 200);
+    const remaining = await pool.query("SELECT id FROM beds WHERE id = $1", [spareBed.id]);
+    assert.equal(remaining.rowCount, 0);
 });

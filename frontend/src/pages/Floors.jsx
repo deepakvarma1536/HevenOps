@@ -22,7 +22,8 @@ export default function Floors() {
       initialFilters={{ propertyId: params.get('propertyId') || '' }}
       defaultView="cards"
       cardGrid="floors-grid"
-      actions={(floor) => <Link className="view-btn" to={`/rooms?floorId=${floor.id}&propertyId=${floor.propertyId}`}>View Rooms →</Link>}
+      actions={(floor) => <><Link className="view-btn" to={`/rooms?floorId=${floor.id}&propertyId=${floor.propertyId}`}>View Rooms →</Link>
+        <Link className="table-action-btn" to={`/apartments?floorId=${floor.id}&propertyId=${floor.propertyId}`}>Apartments</Link></>}
       cardView={(floor, data, actions) => {
         const rooms = data.rooms.filter((room) => room.floorId === floor.id);
         const beds = data.beds.filter((bed) => bed.floorId === floor.id);
@@ -48,7 +49,7 @@ export default function Floors() {
       ]}
       createRecord={(values) => staffApi.post('/floors', { propertyId: Number(values.propertyId), name: values.name.trim() })}
       deleteRecord={owner ? (floor) => staffApi.delete(`/floors/${floor.id}`) : undefined}
-      deleteWarning={(floor) => `Permanently delete floor “${floor.name}” and all its rooms and beds? This cannot be undone.`}
+      deleteWarning={(floor) => `Permanently delete floor “${floor.name}” and all its apartments, rooms and beds? This cannot be undone.`}
     />
   );
 }

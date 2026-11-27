@@ -19,6 +19,7 @@ export default function ApiResourcePage({
   requiresIdempotencyKey = false,
   addLabel,
   initialValues,
+  formDefaults = {},
   onFormComplete,
   search,
   filters = [],
@@ -33,7 +34,7 @@ export default function ApiResourcePage({
   itemLabel = title.toLowerCase(),
 }) {
   const { data, loading, error, retry } = useAsyncResource(loader);
-  const [formValues, setFormValues] = useState(initialValues || {});
+  const [formValues, setFormValues] = useState(initialValues || formDefaults);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState(null);
   const [actionError, setActionError] = useState(null);
@@ -68,7 +69,7 @@ export default function ApiResourcePage({
     const deleteAvailable = deleteRecord && !action;
     return (
       <div className="table-actions">
-        {actions?.(row)}
+        {actions?.(row, data, retry)}
         {details && <button type="button" className="table-action-btn" onClick={() => setSelected(row)}>{details.label}</button>}
         {(action || deleteAvailable) && (
           <button
@@ -126,7 +127,7 @@ export default function ApiResourcePage({
       const requestKey = requiresIdempotencyKey ? idempotencyKey || crypto.randomUUID() : null;
       if (requiresIdempotencyKey && !idempotencyKey) setIdempotencyKey(requestKey);
       await createRecord(formValues, data, requestKey);
-      setFormValues({});
+      setFormValues(formDefaults);
       setIdempotencyKey(null);
       setIsAdding(false);
       if (onFormComplete) onFormComplete();
@@ -142,7 +143,7 @@ export default function ApiResourcePage({
         <form className={addLabel ? "modal-form" : "card auth-form api-resource-form"} id="resource-form" onSubmit={submit} aria-label={`Add ${title.toLowerCase()} record`}>
           {!addLabel && <h3>Add {title.replace(/s$/, '')}</h3>}
           {fields.map((field) => {
-            const options = typeof field.options === 'function' ? field.options(data) : field.options;
+            const options = typeof field.options === 'function' ? field.options(data, formValues) : field.options;
             const inputProps = {
               id: `${title.toLowerCase().replaceAll(' ', '-')}-${field.name}`,
               name: field.name,
@@ -152,7 +153,11 @@ export default function ApiResourcePage({
               onChange(event) {
                 const { value } = event.target;
                 setIdempotencyKey(null);
-                setFormValues((current) => ({ ...current, [field.name]: value }));
+                setFormValues((current) => ({
+                  ...current,
+                  ...Object.fromEntries(fields.filter((item) => item.dependsOn === field.name).map((item) => [item.name, ''])),
+                  [field.name]: value,
+                }));
               },
             };
             return (
@@ -160,7 +165,7 @@ export default function ApiResourcePage({
                 <label htmlFor={inputProps.id}>{field.label}</label>
                 {field.type === 'select' ? (
                   <select {...inputProps}>
-                    <option value="">Select {field.label.toLowerCase()}</option>
+                    <option value="">{field.placeholder || `Select ${field.label.toLowerCase()}`}</option>
                     {(options || []).map((option) => (
                       <option key={option.value} value={option.value} disabled={option.disabled}>{option.label}</option>
                     ))}

@@ -45,6 +45,25 @@ export async function loadFloors(signal) {
   return { properties, floors: rows.flat() };
 }
 
+export async function loadApartments(signal) {
+  const { properties, floors } = await loadFloors(signal);
+  return { properties, floors, apartments: await listApartments(floors, signal) };
+}
+
+async function listApartments(floors, signal) {
+  const rows = await Promise.all(floors.map(async (floor) => {
+    const apartments = await getAll('/apartments', { floorId: floor.id }, signal);
+    return apartments.map((apartment) => ({
+      ...apartment,
+      floorId: floor.id,
+      floor: floor.name,
+      propertyId: floor.propertyId,
+      propertyName: floor.propertyName,
+    }));
+  }));
+  return rows.flat();
+}
+
 export async function loadRooms(signal) {
   const { properties, floors } = await loadFloors(signal);
   const rows = await Promise.all(floors.map(async (floor) => {
@@ -52,6 +71,8 @@ export async function loadRooms(signal) {
     return rooms.map((room) => ({
       ...room,
       roomNumber: room.room_number,
+      apartmentId: room.apartment_id,
+      apartment: room.apartment_name,
       propertyId: floor.propertyId,
       propertyName: floor.propertyName,
       floor: floor.name,
@@ -69,6 +90,7 @@ export async function loadBeds(signal) {
       ...bed,
       bedNumber: bed.bed_number,
       roomNumber: room.roomNumber,
+      apartment: room.apartment,
       roomId: room.id,
       propertyId: room.propertyId,
       propertyName: room.propertyName,
@@ -78,6 +100,11 @@ export async function loadBeds(signal) {
     }));
   }));
   return { properties, floors, rooms, beds: rows.flat() };
+}
+
+export async function loadRoomsPage(signal) {
+  const inventory = await loadBeds(signal);
+  return { ...inventory, apartments: await listApartments(inventory.floors, signal) };
 }
 
 export async function loadTenants(signal) {
@@ -105,7 +132,7 @@ export async function loadRentDues(signal) {
     return dues.map((due) => ({
       ...due,
       tenant: stay.tenant_name,
-      room: `${stay.room_number}${stay.bed_number ? ` • ${stay.bed_number}` : ''}`,
+      room: [stay.apartment_name, stay.room_number, stay.bed_number].filter(Boolean).join(' • '),
       property: stay.property_name,
       propertyId: stay.propertyId,
       phone: stay.tenant_phone,

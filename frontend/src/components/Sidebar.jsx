@@ -21,6 +21,7 @@ function Sidebar({ mobileOpen, closeMobileSidebar, onOpenOrgModal, canManageSpen
     if (path === "/") return "Dashboard";
     if (path.startsWith("/properties")) return "Properties";
     if (path.startsWith("/floors")) return "Floors";
+    if (path.startsWith("/apartments")) return "Apartments";
     if (path.startsWith("/rooms")) return "Rooms";
     if (path.startsWith("/beds")) return "Beds";
     if (path.startsWith("/tenants")) return "Tenants";
@@ -98,6 +99,7 @@ function Sidebar({ mobileOpen, closeMobileSidebar, onOpenOrgModal, canManageSpen
             <div role="group" aria-labelledby="nav-section-property">
               {menuItem("Properties", PropertiesIcon, "/properties")}
               {menuItem("Floors", FloorsIcon, "/floors")}
+              {menuItem("Apartments", PropertiesIcon, "/apartments")}
               {menuItem("Rooms", RoomsIcon, "/rooms")}
               {menuItem("Beds", BedsIcon, "/beds")}
             </div>
