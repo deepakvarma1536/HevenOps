@@ -1,0 +1,33 @@
+Market Research and Competitive Analysis
+Target customer. HevenOps focuses on paying guest (PG) owners and property managers in India who rent individual beds. Our first segment to validate is operators who lease several flats and run them as shared PG accommodation. They need to know which beds are available inside each flat, who occupies them, and when each tenant’s rent is due.
+
+Method. We spoke with three PG operators about how they manage their properties. These conversations gave us examples of the layouts and record-keeping methods operators use. We also compared official product and pricing pages. Prices below are published benchmarks as of 27 November 2026.
+
+Field Research
+
+1. Apartment-based PG using paper registers
+
+We spoke with one of our relatives who rents several apartments in a building and runs them as PG accommodation. They write their records in notebooks. As the books fill up, finding an earlier entry means searching through many pages. They want to record expenses online with a clear description of what each payment was for. They also want to see which beds are empty now and which may open in the next few days when tenants have given notice. This conversation showed us why the app needs to track beds within individual apartments and distinguish current vacancies from expected ones.
+
+2. PG using Microsoft Excel
+
+We met another PG operator who uses Excel to keep track of their PG records. Excel is an existing alternative for operators who already keep their records digitally. For this type of operator, we need to show whether HevenOps makes everyday tasks such as updating bed assignments, checking vacancies, and reviewing rent or expenses easier than their current spreadsheet. We still need to test that with the operator.
+
+3. Purpose-built PG using floor and room numbers
+
+We spoke with an operator whose building was built specifically as a PG. They want to organise beds by floor and room number, with rooms directly under each floor. This gave us a reason to support both building layouts in HevenOps. A purpose-built PG can use Property → Floor → Room → Bed, while an operator using leased apartments can use Property → Floor → Apartment → Room → Bed.
+
+What we learned. The three conversations revealed two different building layouts and two existing ways to keep records. The apartment operator gave us concrete features to test in a demo. We can ask them to enter an expense, check which beds are empty today, and find a bed expected to open after a tenant moves out. Our next step is to see how operators handle these tasks in the prototype and what would make them switch from their current system.
+
+Desk Research and Competitor Comparison
+
+Alternative	What it offers	Published cost or effort
+| Alternative | What it offers | Published cost or effort |
+|---|---|---|
+| Google Sheets | A shared spreadsheet that an operator can adapt into a bed register and rent ledger. | Basic use is available with a Google account. The operator sets up the tracker and maintains its records and formulas. Google Sheets |
+| My PG Manager | Bed management for PGs, whole-flat rental management, WhatsApp reminders, and online rent collection. | ₹159 per month after a 14-day trial. Apartment features · Pricing |
+| PG Manager | Bed bookings, rent tracking, reports, and SMS and WhatsApp reminders. | ₹3,600 per PG per year plus GST for up to 75 beds. Additional beds cost ₹30 per bed per year. PG Manager features and pricing |
+| RentOk | Floor plans, room and bed allocation, tenant check-in, automated billing, and payment reminders. | The website directs buyers to sales for plan information. RentOk |
+
+
+Where HevenOps fits. Existing products already cover rent and occupancy. HevenOps’ proposed advantage is a specific workflow for operators who rent out beds inside leased apartments. The prototype lets an owner set up Property → Floor → Apartment → Room → Bed, track rent every 30 days from each tenant’s move-in date, and give each manager access to their assigned properties. A reason to switch would be faster vacancy checks and rent reconciliation across flats. That benefit is a hypothesis to test with operators. Online payments and WhatsApp delivery are areas where existing competitors already offer more.
