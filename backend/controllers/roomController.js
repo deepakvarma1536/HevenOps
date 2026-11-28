@@ -22,14 +22,14 @@ const RoomController = {
 
     async create(req, res) {
         try {
-            const { floorId, room_number, room_type } = req.validated.body;
+            const { floorId, room_number, room_type, apartmentId } = req.validated.body;
 
             if (!floorId || !room_number) {
                 return res.status(400).json({ error: "floorId and room_number are required" });
             }
 
             const room = await RoomModel.create(
-                floorId, room_number, room_type || null, req.user.organizationId
+                floorId, room_number, room_type || null, req.user.organizationId, apartmentId
             );
 
             if (!room) {
@@ -53,13 +53,13 @@ const RoomController = {
             const { id } = req.params;
             if (!validateIdParam(id, res, "id")) return;
 
-            const { room_number, room_type } = req.validated.body;
+            const { room_number, room_type, apartmentId } = req.validated.body;
             if (!room_number) {
                 return res.status(400).json({ error: "room_number is required" });
             }
 
             const updated = await RoomModel.update(
-                id, room_number, room_type === "" ? null : room_type, req.user.organizationId
+                id, room_number, room_type === "" ? null : room_type, req.user.organizationId, apartmentId
             );
 
             if (!updated) {

@@ -7,6 +7,7 @@ import Layout from "./components/Layout";
 // Pages
 import Dashboard from "./pages/Dashboard";
 import Properties from "./pages/Properties";
+import Apartments from "./pages/Apartments";
 import Floors from "./pages/Floors";
 import Rooms from "./pages/Rooms";
 import Beds from "./pages/Beds";
@@ -44,6 +45,7 @@ function App() {
         <Route index element={<Dashboard />} />
         <Route path="properties" element={<Properties />} />
         <Route path="floors" element={<Floors />} />
+        <Route path="apartments" element={<Apartments />} />
         <Route path="rooms" element={<Rooms />} />
         <Route path="beds" element={<Beds />} />
         <Route path="tenants" element={<Tenants />} />

@@ -15,6 +15,7 @@ const StayModel = {
             JOIN tenants t ON s.tenant_id = t.id
             JOIN beds b ON s.bed_id = b.id
             JOIN rooms r ON b.room_id = r.id
+            LEFT JOIN apartments a ON a.id = r.apartment_id
             JOIN floors f ON r.floor_id = f.id
             JOIN properties p ON f.property_id = p.id
             WHERE s.organization_id = $1
@@ -41,11 +42,13 @@ const StayModel = {
             select: `SELECT s.id, s.organization_id, s.tenant_id, s.bed_id,
                 to_char(s.move_in_date, 'YYYY-MM-DD') AS move_in_date,
                 to_char(s.move_out_date, 'YYYY-MM-DD') AS move_out_date,
+                to_char(s.planned_move_out_date, 'YYYY-MM-DD') AS planned_move_out_date,
+                s.planned_move_out_date - CURRENT_DATE AS days_until_planned_move_out,
                 CASE WHEN s.move_out_date IS NULL THEN 'ACTIVE' ELSE 'CHECKED_OUT' END AS status,
                 s.created_at, t.name AS tenant_name, t.phone AS tenant_phone,
                 b.bed_number, (SELECT rp.monthly_rent_paise FROM stay_rate_plans rp WHERE rp.stay_id = s.id AND rp.effective_from <= CURRENT_DATE
                     AND (rp.effective_to IS NULL OR rp.effective_to >= CURRENT_DATE)
-                    ORDER BY rp.effective_from DESC LIMIT 1) AS monthly_rent_paise, r.room_number, f.name AS floor_name, p.name AS property_name, p.id AS property_id`,
+                    ORDER BY rp.effective_from DESC LIMIT 1) AS monthly_rent_paise, r.room_number, a.name AS apartment_name, f.name AS floor_name, p.name AS property_name, p.id AS property_id`,
             fromWhere,
             values,
             ...options,
@@ -73,18 +76,22 @@ const StayModel = {
                 s.bed_id,
                 s.move_in_date,
                 s.move_out_date,
+                to_char(s.planned_move_out_date, 'YYYY-MM-DD') AS planned_move_out_date,
+                s.planned_move_out_date - CURRENT_DATE AS days_until_planned_move_out,
                 s.created_at,
                 t.name AS tenant_name,
                 t.phone AS tenant_phone,
                 b.bed_number,
                 b.status AS bed_status,
                 r.room_number,
+                a.name AS apartment_name,
                 f.name AS floor_name,
                 p.name AS property_name, p.id AS property_id
             FROM stays s
             JOIN tenants t ON s.tenant_id = t.id
             JOIN beds b ON s.bed_id = b.id
             JOIN rooms r ON b.room_id = r.id
+            LEFT JOIN apartments a ON a.id = r.apartment_id
             JOIN floors f ON r.floor_id = f.id
             JOIN properties p ON f.property_id = p.id
             WHERE s.id = $1 AND s.organization_id = $2
@@ -189,13 +196,17 @@ const StayModel = {
         try {
             await client.query("BEGIN");
             const { rows: [stay] } = await client.query(
-                `SELECT move_in_date = $3::date AS same_date
+                `SELECT move_in_date = $3::date AS same_date,
+                        planned_move_out_date < $3::date AS notice_before_move_in
                  FROM stays WHERE id = $1 AND organization_id = $2 AND move_out_date IS NULL
                  FOR NO KEY UPDATE`,
                 [id, organizationId, moveInDate]
             );
             let result;
             if (stay) {
+                if (stay.notice_before_move_in) {
+                    throw new ApiError(409, "MOVE_IN_AFTER_NOTICE", "Update the planned move-out date before moving check-in past it.");
+                }
                 if (!stay.same_date) {
                     const billed = await client.query(
                         "SELECT 1 FROM rent_dues WHERE stay_id = $1 AND billing_cycle IS NOT NULL LIMIT 1", [id]
@@ -222,6 +233,29 @@ const StayModel = {
         } finally {
             client.release();
         }
+    },
+
+    async setPlannedMoveOut(id, organizationId, date) {
+        const { rows: [notice] } = await pool.query(
+            `WITH active AS (
+                SELECT id, ($3::date IS NULL OR $3::date >= GREATEST(CURRENT_DATE, move_in_date)) AS valid_date
+                FROM stays WHERE id = $1 AND organization_id = $2 AND move_out_date IS NULL
+                FOR NO KEY UPDATE
+            ), saved AS (
+                UPDATE stays s SET planned_move_out_date = $3::date
+                FROM active WHERE s.id = active.id AND active.valid_date
+                RETURNING s.id, s.planned_move_out_date
+            )
+            SELECT active.id, active.valid_date, to_char(saved.planned_move_out_date, 'YYYY-MM-DD') AS planned_move_out_date
+            FROM active LEFT JOIN saved USING (id)`,
+            [id, organizationId, date]
+        );
+
+        if (!notice) throw new ApiError(404, "NOT_FOUND", "Active stay not found.");
+        if (!notice.valid_date) {
+            throw new ApiError(400, "INVALID_PLANNED_MOVE_OUT", "Choose a planned move-out date on or after today and the move-in date.");
+        }
+        return { id: notice.id, planned_move_out_date: notice.planned_move_out_date };
     },
 
     async setRatePlan(id, organizationId, effectiveFrom, monthlyRentPaise) {
@@ -293,7 +327,7 @@ const StayModel = {
             remaining = balance.rows[0].remaining_paise;
             if (remaining === "0") {
                 const updatedStay = await client.query(
-                    `UPDATE stays SET move_out_date = COALESCE($1::date, CURRENT_DATE)
+                    `UPDATE stays SET move_out_date = COALESCE($1::date, CURRENT_DATE), planned_move_out_date = NULL
                      WHERE id = $2 RETURNING *`,
                     [moveOutDate, id]
                 );

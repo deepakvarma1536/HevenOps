@@ -19,6 +19,9 @@ router.post("/", authorize("operations:write"), validateRequest(schemas.stayCrea
 // PUT /api/stays/:id — Update a stay (move-in date)
 router.put("/:id", authorize("operations:write"), validateRequest(schemas.stayUpdate), assignedProperty("stay", (req) => req.validated.params.id), StayController.update);
 
+router.patch("/:id/planned-move-out", authorize("operations:write"), validateRequest(schemas.plannedMoveOut),
+    assignedProperty("stay", (req) => req.validated.params.id), StayController.setPlannedMoveOut);
+
 // PATCH /api/stays/:id/checkout — End a stay (checkout tenant, free bed)
 router.patch("/:id/checkout", authorize("operations:write"), validateRequest(schemas.checkout), assignedProperty("stay", (req) => req.validated.params.id), StayController.checkout);
 

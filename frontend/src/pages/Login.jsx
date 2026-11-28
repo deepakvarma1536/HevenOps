@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useAuth } from '../context/useAuth';
 import { Link } from 'react-router-dom';
+import PasswordInput from '../components/PasswordInput';
 
 function Login() {
   const [email, setEmail] = useState('');
@@ -53,17 +54,11 @@ function Login() {
           
           <div className="form-group">
             <label htmlFor="password">Password</label>
-            <input
-              type="password"
+            <PasswordInput
               id="password"
               name="password"
               value={password}
               onChange={(e) => { setPassword(e.target.value); setError(''); }}
-              placeholder="••••••••"
-              autoComplete="current-password"
-              maxLength={128}
-              required
-              className="form-input"
             />
           </div>
           

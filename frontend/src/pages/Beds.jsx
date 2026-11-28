@@ -15,7 +15,7 @@ function roomOptions(data) {
   return data.rooms.map((room) => {
     const count = bedCounts.get(room.id) || 0;
     const full = room.bed_capacity != null && count >= room.bed_capacity;
-    const name = `${room.propertyName} — ${room.floor} — ${room.roomNumber}`;
+    const name = [room.propertyName, room.floor, room.apartment, room.roomNumber].filter(Boolean).join(' — ');
     return {
       value: room.id,
       label: full ? `${name} (Full, ${count}/${room.bed_capacity} beds)` : name,
@@ -24,36 +24,64 @@ function roomOptions(data) {
   });
 }
 
+const availabilityFilter = {
+  key: 'availability',
+  label: 'Availability',
+  all: 'All Availability',
+  options: () => ['Vacant now', 'Upcoming vacancy', 'Checkout pending'],
+};
+
+function selectBeds(data) {
+  return data.beds.map((bed) => {
+    let availability = bed.status === 'Vacant' ? 'Vacant now' : null;
+    if (bed.status === 'Occupied' && bed.stay?.planned_move_out_date) {
+      availability = bed.stay.days_until_planned_move_out < 0 ? 'Checkout pending' : 'Upcoming vacancy';
+    }
+    return { ...bed, availability };
+  });
+}
+
+function expectedAvailability(bed) {
+  if (bed.availability === 'Vacant now') return 'Available now';
+  if (!bed.availability) return '—';
+  const days = bed.stay.days_until_planned_move_out;
+  const date = formatDate(bed.stay.planned_move_out_date);
+  const estimate = days < 0 ? 'Checkout pending' : days === 0 ? 'Expected today' : `Expected in ${days} ${days === 1 ? 'day' : 'days'}`;
+  return <>{estimate}<small className="resource-secondary">{date}</small></>;
+}
+
 export default function Beds() {
   const [params] = useSearchParams();
   const owner = useAuth().user?.role === 'owner';
   return (
     <ApiResourcePage
       title="Beds"
-      description="Use unique bed numbers across the property."
+      description="See beds available now and beds expected to open after checkout."
       loader={loadBedDirectory}
       addLabel="Add Bed"
       search={{ label: 'Search bed, room number or resident', values: (bed) => [bed.bedNumber, bed.roomNumber, bed.stay?.tenant_name] }}
-      filters={[propertyFilter, statusFilter,
+      filters={[propertyFilter, statusFilter, availabilityFilter,
         { key: 'roomId', label: 'Room', all: 'All Rooms', options: (data) => data.rooms.map((room) => ({ value: room.id, label: `${room.roomNumber} · ${room.propertyName}` })) }]}
       initialFilters={{ propertyId: params.get('propertyId') || '', roomId: params.get('roomId') || '' }}
       details={{ label: 'Details', title: (bed) => `Bed ${bed.bedNumber}` }}
       summary={(_data, beds) => (
-        <div className="mini-stats-grid">
+        <div className="mini-stats-grid bed-stats">
           {[
             ['Total Tracked Beds', beds.length],
             ...['Occupied', 'Vacant', 'Maintenance'].map((status) => [status, beds.filter((bed) => bed.status === status).length]),
+            ['Upcoming Vacancies', beds.filter((bed) => bed.availability === 'Upcoming vacancy').length],
           ].map(([label, count]) => (
             <div className="mini-stat-card" key={label}><span>{label}</span><strong>{count}</strong></div>
           ))}
         </div>
       )}
-      selectRows={(data) => data.beds}
+      selectRows={selectBeds}
       columns={[
         { key: 'bedNumber', label: 'Bed Number', render: (bed) => <strong>{bed.bedNumber}</strong> },
         { key: 'roomNumber', label: 'Room' },
         { key: 'propertyName', label: 'Property' },
         { key: 'floor', label: 'Floor' },
+        { key: 'apartment', label: 'Apartment' },
         { key: 'resident', label: 'Current Resident', render: (bed) => bed.stay?.tenant_name || '—' },
         { key: 'moveIn', label: 'Move-in Date', render: (bed) => formatDate(bed.stay?.move_in_date) },
         { key: 'rent', label: 'Monthly Rent', render: (bed) => {
@@ -61,6 +89,7 @@ export default function Beds() {
           return money(rent == null ? null : Number(rent) / 100);
         } },
         { key: 'status', label: 'Status', render: (bed) => <StatusBadge status={bed.status} /> },
+        { key: 'availability', label: 'Expected Availability', render: expectedAvailability },
       ]}
       fields={[
         {

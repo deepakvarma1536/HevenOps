@@ -9,9 +9,15 @@ const scopes = {
         joins: "JOIN floors f ON f.property_id = p.id",
         active: "AND f.archived_at IS NULL",
     },
+    apartment: {
+        alias: "a",
+        columns: "a.id",
+        joins: "JOIN floors f ON f.property_id = p.id JOIN apartments a ON a.floor_id = f.id",
+        active: "AND f.archived_at IS NULL",
+    },
     room: {
         alias: "r",
-        columns: "r.id, r.room_type, r.room_number",
+        columns: "r.id, r.floor_id, r.room_type, r.room_number, r.apartment_id",
         joins: "JOIN floors f ON f.property_id = p.id JOIN rooms r ON r.floor_id = f.id",
         active: "AND f.archived_at IS NULL AND r.archived_at IS NULL",
     },
@@ -79,7 +85,7 @@ async function requireUniqueName(client, kind, propertyId, name, excludeId = nul
     }
 }
 
-const inventoryTables = { property: "properties", floor: "floors", room: "rooms", bed: "beds" };
+const inventoryTables = { property: "properties", floor: "floors", apartment: "apartments", room: "rooms", bed: "beds" };
 
 async function deleteInventory(scope, id, organizationId) {
     try {

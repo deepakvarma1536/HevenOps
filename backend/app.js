@@ -79,6 +79,7 @@ function createApp(env) {
     const authRoutes = require("./routes/authRoutes");
     const organizationRoutes = require("./routes/organizationRoutes");
     const propertyRoutes = require("./routes/propertyRoutes");
+    const apartmentRoutes = require("./routes/apartmentRoutes");
     const floorRoutes = require("./routes/floorRoutes");
     const roomRoutes = require("./routes/roomRoutes");
     const bedRoutes = require("./routes/bedRoutes");
@@ -101,6 +102,7 @@ function createApp(env) {
     app.use("/api/managers", managerRoutes);
     app.use("/api/properties", propertyRoutes);
     app.use("/api/floors", floorRoutes);
+    app.use("/api/apartments", apartmentRoutes);
     app.use("/api/rooms", roomRoutes);
     app.use("/api/beds", bedRoutes);
     app.use("/api/tenants", tenantRoutes);

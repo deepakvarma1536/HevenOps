@@ -8,14 +8,28 @@ function withCapacity(room) {
     return { ...room, bed_capacity: bedCapacity(room.room_type) };
 }
 
+async function validateApartment(client, floorId, apartmentId) {
+    if (apartmentId == null) return;
+    const result = await client.query(
+        "SELECT 1 FROM apartments WHERE floor_id = $1 AND id = $2",
+        [floorId, apartmentId]
+    );
+    if (!result.rowCount) throw new ApiError(400, "APARTMENT_FLOOR_MISMATCH", "Select an apartment on the same floor.");
+}
+
 const RoomModel = {
     async getByFloor(floorId, organizationId, options = {}) {
         const values = [floorId, organizationId];
         let fromWhere = `FROM rooms r
+             LEFT JOIN apartments a ON a.id = r.apartment_id
              JOIN floors f ON r.floor_id = f.id
              JOIN properties p ON f.property_id = p.id
              WHERE r.floor_id = $1 AND p.organization_id = $2
                AND r.archived_at IS NULL AND f.archived_at IS NULL AND p.archived_at IS NULL`;
+        if (options.apartmentId) {
+            values.push(options.apartmentId);
+            fromWhere += ` AND r.apartment_id = $${values.length}`;
+        }
         if (options.search) {
             values.push(`%${options.search}%`);
             fromWhere += ` AND r.room_number ILIKE $${values.length}`;
@@ -25,7 +39,7 @@ const RoomModel = {
             fromWhere += ` AND r.room_type = $${values.length}`;
         }
         const page = await paginateQuery(pool, {
-            select: "SELECT r.id, r.floor_id, r.room_number, r.room_type, r.created_at, r.updated_at",
+            select: "SELECT r.id, r.floor_id, r.apartment_id, a.name AS apartment_name, r.room_number, r.room_type, r.created_at, r.updated_at",
             fromWhere,
             values,
             ...options,
@@ -40,18 +54,19 @@ const RoomModel = {
         return room && withCapacity(room);
     },
 
-    async create(floorId, roomNumber, roomType, organizationId) {
+    async create(floorId, roomNumber, roomType, organizationId, apartmentId = null) {
         return withLockedInventory("floor", floorId, organizationId, async (client, floor) => {
+            await validateApartment(client, floor.id, apartmentId);
             await requireUniqueName(client, "room", floor.property_id, roomNumber);
             const result = await client.query(
-                "INSERT INTO rooms (floor_id, room_number, room_type) VALUES ($1, $2, $3) RETURNING *",
-                [floor.id, roomNumber, roomType]
+                "INSERT INTO rooms (floor_id, room_number, room_type, apartment_id) VALUES ($1, $2, $3, $4) RETURNING *",
+                [floor.id, roomNumber, roomType, apartmentId]
             );
             return withCapacity(result.rows[0]);
         });
     },
 
-    async update(id, roomNumber, roomType, organizationId) {
+    async update(id, roomNumber, roomType, organizationId, apartmentId) {
         return withLockedInventory("room", id, organizationId, async (client, room) => {
             if (roomNumber !== room.room_number) {
                 await requireUniqueName(client, "room", room.property_id, roomNumber, room.id);
@@ -65,9 +80,11 @@ const RoomModel = {
                 }
             }
 
+            const nextApartment = apartmentId === undefined ? room.apartment_id : apartmentId;
+            await validateApartment(client, room.floor_id, nextApartment);
             const result = await client.query(
-                "UPDATE rooms SET room_number = $1, room_type = $2 WHERE id = $3 RETURNING *",
-                [roomNumber, nextType, room.id]
+                "UPDATE rooms SET room_number = $1, room_type = $2, apartment_id = $3 WHERE id = $4 RETURNING *",
+                [roomNumber, nextType, nextApartment, room.id]
             );
             return withCapacity(result.rows[0]);
         });

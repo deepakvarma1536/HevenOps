@@ -26,7 +26,7 @@ export default function Tenants() {
         ) },
         { key: 'contact', label: 'Phone & Email', render: (tenant) => <>{tenant.phone}<small className="resource-secondary">{tenant.email || '—'}</small></> },
         { key: 'property', label: 'Property' },
-        { key: 'room', label: 'Room & Bed', render: (tenant) => tenant.stay ? <>{tenant.stay.room_number}<small className="resource-secondary">{tenant.stay.bed_number}</small></> : '—' },
+        { key: 'room', label: 'Room & Bed', render: (tenant) => tenant.stay ? <>{[tenant.stay.apartment_name, tenant.stay.room_number].filter(Boolean).join(' · ')}<small className="resource-secondary">{tenant.stay.bed_number}</small></> : '—' },
         { key: 'moveIn', label: 'Move-in Date', render: (tenant) => formatDate(tenant.stay?.move_in_date) },
         { key: 'status', label: 'Rent Status', render: (tenant) => tenant.status ? <StatusBadge status={tenant.status} /> : '—' },
       ]}

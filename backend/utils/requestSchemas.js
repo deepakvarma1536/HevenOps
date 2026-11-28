@@ -59,10 +59,21 @@ const schemas = {
     floorCreate: request({
         body: z.object({ propertyId: z.coerce.number().int().positive(), name: nonEmpty(50) }).strict(),
     }),
+    apartmentCreate: request({
+        body: z.object({ floorId: z.coerce.number().int().positive(), name: nonEmpty(50) }).strict(),
+    }),
+    apartmentList: request({
+        query: listQuerySchema({
+            sortFields: ["id", "name", "created_at"],
+            filters: { floorId: z.coerce.number().int().positive() },
+            requiredFilters: ["floorId"],
+        }),
+    }),
     roomCreate: request({
         body: z.object({
             floorId: z.coerce.number().int().positive(),
             room_number: nonEmpty(20),
+            apartmentId: z.coerce.number().int().positive().nullable().optional(),
             room_type: z.string().trim().max(50).nullable().optional(),
         }).strict(),
     }),
@@ -84,6 +95,7 @@ const schemas = {
         params: z.object({ id }).passthrough(),
         body: z.object({
             room_number: nonEmpty(20),
+            apartmentId: z.coerce.number().int().positive().nullable().optional(),
             room_type: z.string().trim().max(50).nullable().optional(),
         }).strict(),
     }),
@@ -114,6 +126,10 @@ const schemas = {
     stayUpdate: request({
         params: z.object({ id }).passthrough(),
         body: z.object({ moveInDate: isoDate }).strict(),
+    }),
+    plannedMoveOut: request({
+        params: z.object({ id }).passthrough(),
+        body: z.object({ plannedMoveOutDate: isoDate.nullable() }).strict(),
     }),
     checkout: request({
         params: z.object({ id }).passthrough(),
@@ -188,7 +204,7 @@ const schemas = {
     roomList: request({
         query: listQuerySchema({
             sortFields: ["id", "room_number", "room_type", "created_at"],
-            filters: { floorId: z.coerce.number().int().positive(), search: z.string().trim().max(100).optional(), room_type: z.string().trim().max(50).optional() },
+            filters: { floorId: z.coerce.number().int().positive(), apartmentId: z.coerce.number().int().positive().optional(), search: z.string().trim().max(100).optional(), room_type: z.string().trim().max(50).optional() },
             requiredFilters: ["floorId"],
         }),
     }),
@@ -261,6 +277,7 @@ schemas.bedUpdate = idParams();
 schemas.organizationDelete = idParams();
 schemas.propertyDelete = idParams();
 schemas.floorDelete = idParams();
+schemas.apartmentDelete = idParams();
 schemas.roomDelete = idParams();
 schemas.bedDelete = idParams();
 schemas.tenantDelete = idParams();

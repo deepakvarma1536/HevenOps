@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useTenantAuth } from '../context/useTenantAuth';
+import PasswordInput from '../components/PasswordInput';
 
 function TenantLogin() {
   const [identifier, setIdentifier] = useState('');
@@ -52,17 +53,11 @@ function TenantLogin() {
           
           <div className="form-group">
             <label htmlFor="password">Password</label>
-            <input
-              type="password"
+            <PasswordInput
               id="password"
               name="password"
               value={password}
               onChange={(e) => { setPassword(e.target.value); setError(''); }}
-              placeholder="••••••••"
-              autoComplete="current-password"
-              maxLength={128}
-              required
-              className="form-input"
             />
           </div>
           

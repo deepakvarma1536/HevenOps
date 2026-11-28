@@ -21,3 +21,8 @@ export const propertyFilter = {
 };
 
 export const statusFilter = { key: 'status', label: 'Status', all: 'All Statuses' };
+
+export const floorOptions = (data) => data?.floors.map((floor) => ({
+  value: floor.id,
+  label: `${floor.name} · ${floor.propertyName}`,
+})) || [];

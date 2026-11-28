@@ -78,13 +78,17 @@
         "required": true,
         "content": { "application/json": { "schema": { "type": "object", "required": ["name"], "properties": { "name": { "type": "string", "minLength": 1, "maxLength": 50 } }, "additionalProperties": false } } }
       },
+      "ApartmentCreate": {
+        "required": true,
+        "content": { "application/json": { "schema": { "type": "object", "required": ["floorId", "name"], "properties": { "floorId": { "type": "integer", "minimum": 1 }, "name": { "type": "string", "minLength": 1, "maxLength": 50 } }, "additionalProperties": false } } }
+      },
       "RoomCreate": {
         "required": true,
-        "content": { "application/json": { "schema": { "type": "object", "required": ["floorId", "room_number"], "properties": { "floorId": { "type": "integer", "minimum": 1 }, "room_number": { "type": "string", "maxLength": 20 }, "room_type": { "type": ["string", "null"], "maxLength": 50 } }, "additionalProperties": false } } }
+        "content": { "application/json": { "schema": { "type": "object", "required": ["floorId", "room_number"], "properties": { "floorId": { "type": "integer", "minimum": 1 }, "apartmentId": { "type": ["integer", "null"], "minimum": 1 }, "room_number": { "type": "string", "maxLength": 20 }, "room_type": { "type": ["string", "null"], "maxLength": 50 } }, "additionalProperties": false } } }
       },
       "RoomUpdate": {
         "required": true,
-        "content": { "application/json": { "schema": { "type": "object", "required": ["room_number"], "properties": { "room_number": { "type": "string", "minLength": 1, "maxLength": 20 }, "room_type": { "type": ["string", "null"], "maxLength": 50 } }, "additionalProperties": false } } }
+        "content": { "application/json": { "schema": { "type": "object", "required": ["room_number"], "properties": { "apartmentId": { "type": ["integer", "null"], "minimum": 1, "description": "Apartment on the same floor. Send null to move the room directly onto the floor." }, "room_number": { "type": "string", "minLength": 1, "maxLength": 20 }, "room_type": { "type": ["string", "null"], "maxLength": 50 } }, "additionalProperties": false } } }
       },
       "BedCreate": {
         "required": true,
@@ -109,6 +113,10 @@
       "Checkout": {
         "required": true,
         "content": { "application/json": { "schema": { "type": "object", "properties": { "moveOutDate": { "type": "string", "format": "date" } }, "additionalProperties": false } } }
+      },
+      "PlannedMoveOut": {
+        "required": true,
+        "content": { "application/json": { "schema": { "type": "object", "required": ["plannedMoveOutDate"], "properties": { "plannedMoveOutDate": { "type": ["string", "null"], "format": "date", "description": "Expected move-out date. Use null to clear the notice." } }, "additionalProperties": false } } }
       },
       "RatePlan": {
         "required": true,
@@ -194,8 +202,16 @@
       "patch": { "summary": "Rename floor", "security": [{ "BearerAuth": [] }], "requestBody": { "$ref": "#/components/requestBodies/FloorUpdate" }, "responses": { "200": { "description": "Floor updated" }, "409": { "description": "Floor name already exists in this property" } } },
       "delete": { "summary": "Permanently delete the floor and its rooms and beds", "security": [{ "BearerAuth": [] }], "responses": { "200": { "description": "Floor deleted" }, "409": { "description": "A bed is linked to a stay" } } }
     },
+    "/apartments": {
+      "get": { "summary": "List apartments by floor", "security": [{ "BearerAuth": [] }], "parameters": [{ "in": "query", "name": "floorId", "required": true, "schema": { "type": "integer" } }], "responses": { "200": { "description": "Paginated apartments" } } },
+      "post": { "summary": "Create apartment", "security": [{ "BearerAuth": [] }], "requestBody": { "$ref": "#/components/requestBodies/ApartmentCreate" }, "responses": { "201": { "description": "Created apartment" }, "409": { "description": "Apartment name already exists on this floor" } } }
+    },
+    "/apartments/{id}": {
+      "parameters": [{ "in": "path", "name": "id", "required": true, "schema": { "type": "integer", "minimum": 1 } }],
+      "delete": { "summary": "Permanently delete the apartment and its rooms and beds", "security": [{ "BearerAuth": [] }], "responses": { "200": { "description": "Apartment deleted" }, "409": { "description": "A bed is linked to a stay" } } }
+    },
     "/rooms": {
-      "get": { "summary": "List rooms by floor", "security": [{ "BearerAuth": [] }], "parameters": [{ "in": "query", "name": "floorId", "required": true, "schema": { "type": "integer" } }], "responses": { "200": { "description": "Paginated rooms" } } },
+      "get": { "summary": "List rooms by floor", "security": [{ "BearerAuth": [] }], "parameters": [{ "in": "query", "name": "floorId", "required": true, "schema": { "type": "integer" } }, { "in": "query", "name": "apartmentId", "schema": { "type": "integer" } }], "responses": { "200": { "description": "Paginated rooms" } } },
       "post": { "summary": "Create room", "description": "A sharing type such as 3 Sharing sets the room's bed_capacity.", "security": [{ "BearerAuth": [] }], "requestBody": { "$ref": "#/components/requestBodies/RoomCreate" }, "responses": { "201": { "description": "Created room" }, "409": { "description": "Room number already exists in this property" } } }
     },
     "/rooms/{id}": {
@@ -228,7 +244,7 @@
       "post": { "summary": "Create tenant invitation", "security": [{ "BearerAuth": [] }], "requestBody": { "$ref": "#/components/requestBodies/Invite" }, "responses": { "201": { "description": "One-time invitation token" } } }
     },
     "/stays": {
-      "get": { "summary": "List stays", "security": [{ "BearerAuth": [] }], "responses": { "200": { "description": "Paginated stay DTOs" } } },
+      "get": { "summary": "List stays", "security": [{ "BearerAuth": [] }], "responses": { "200": { "description": "Paginated stay DTOs with nullable planned_move_out_date and days_until_planned_move_out" } } },
       "post": { "summary": "Assign tenant to bed", "security": [{ "BearerAuth": [] }], "requestBody": { "$ref": "#/components/requestBodies/StayCreate" }, "responses": { "201": { "description": "Created stay" } } }
     },
     "/stays/{id}": {
@@ -237,6 +253,9 @@
     },
     "/stays/{id}/checkout": {
       "patch": { "summary": "Check out tenant", "security": [{ "BearerAuth": [] }], "requestBody": { "$ref": "#/components/requestBodies/Checkout" }, "responses": { "200": { "description": "Stay checked out" }, "409": { "description": "The stay has an outstanding rent balance", "$ref": "#/components/responses/ApiError" } } }
+    },
+    "/stays/{id}/planned-move-out": {
+      "patch": { "summary": "Set or clear move-out notice for an active stay", "security": [{ "BearerAuth": [] }], "requestBody": { "$ref": "#/components/requestBodies/PlannedMoveOut" }, "responses": { "200": { "description": "Updated notice" }, "400": { "$ref": "#/components/responses/ApiError" }, "404": { "$ref": "#/components/responses/ApiError" } } }
     },
     "/stays/{id}/rate-plans": {
       "post": { "summary": "Create rate plan", "security": [{ "BearerAuth": [] }], "requestBody": { "$ref": "#/components/requestBodies/RatePlan" }, "responses": { "201": { "description": "Rate plan created" } } }
